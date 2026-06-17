@@ -4,6 +4,7 @@ import 'package:get/get.dart';
 import '../../controllers/task_controller.dart';
 import '../../controllers/settings_controller.dart';
 import '../../models/task_model.dart';
+import '../../models/check_in_model.dart';
 import '../../utils/snackbar_utils.dart';
 
 class VoiceAssistantOverlay extends StatefulWidget {
@@ -71,54 +72,35 @@ class _VoiceAssistantOverlayState extends State<VoiceAssistantOverlay> with Tick
   void _parseCommand(String text) {
     final lowerText = text.toLowerCase();
     
-    // 1. Check if it's a Complete/Check-in command
-    // e.g. "我要去打卡喝水任务", "打卡喝水", "完成健身任务", "我要打卡喝水"
-    if (lowerText.contains("打卡") || lowerText.contains("完成") || lowerText.contains("check") || lowerText.contains("complete")) {
-      // Extract task title. E.g. strip "我要去打卡", "任务", "完成"
-      String targetTitle = text
-          .replaceAll(RegExp(r'(我要去|我要|去|打卡|完成|任务|check|complete|done)'), '')
-          .trim();
-          
+    // 3. Complete existing task
+    if (lowerText.contains("完成") || lowerText.contains("complete") || lowerText.contains("done")) {
+      String targetTitle = text.replaceAll(RegExp(r'(完成|任务|complete|done|task)'), '').trim();
       if (targetTitle.isEmpty) {
-        SnackbarUtils.showError(title: 'error'.tr, message: 'Could not detect task title.');
+        SnackbarUtils.showError(title: 'error'.tr, message: 'error_no_title'.tr);
         return;
       }
-
-      // Find task matching this title
       final matchingTask = taskController.tasks.firstWhereOrNull(
         (t) => t.title.toLowerCase().contains(targetTitle.toLowerCase()) && !t.isCompleted
       );
-
       if (matchingTask != null) {
         taskController.toggleTaskCompletion(matchingTask.id);
-        SnackbarUtils.showSuccess(
-          title: 'success'.tr,
-          message: 'Task "${matchingTask.title}" marked completed!',
-        );
+        SnackbarUtils.showSuccess(title: 'success'.tr, message: '${'success_completed'.tr}"${matchingTask.title}"');
         Navigator.pop(context);
       } else {
-        SnackbarUtils.showInfo(
-          title: 'info'.tr,
-          message: 'Active task matching "$targetTitle" not found. Creating it first.',
-        );
-        // Fallback to creating a task and completing it
-        _createTaskFromVoice(targetTitle, isImmediateComplete: true);
+        SnackbarUtils.showInfo(title: 'info'.tr, message: 'Active task matching "$targetTitle" not found.');
       }
       return;
     }
 
-    // 2. Check if it's a Create command
-    // e.g. "新建健身任务，等级是紧急，截止日期是明天", "新建喝水任务"
-    String taskTitle = text
+    // Common parsing for creation
+    String rawTitle = text
         .replaceAll(RegExp(r'(新建|创建|添加|添加一个|new|create|add)'), '')
-        .replaceAll(RegExp(r'(任务)'), '')
+        .replaceAll(RegExp(r'(打卡|习惯|待办|任务|check-in|habit|task)'), '')
         .trim();
 
-    // Parse out parameters if they exist
     int? levelIndex;
     DateTime? deadline;
 
-    // Check level index keywords
     for (int i = 0; i < 5; i++) {
       final name = settingsController.getLevelName(i);
       if (text.contains(name)) {
@@ -127,7 +109,6 @@ class _VoiceAssistantOverlayState extends State<VoiceAssistantOverlay> with Tick
       }
     }
     
-    // Extra keyword checks for levels
     if (levelIndex == null) {
       if (text.contains("一般") || text.contains("普通") || text.contains("normal") || text.contains("common")) levelIndex = 0;
       else if (text.contains("重要") || text.contains("优秀") || text.contains("important") || text.contains("uncommon")) levelIndex = 1;
@@ -136,26 +117,47 @@ class _VoiceAssistantOverlayState extends State<VoiceAssistantOverlay> with Tick
       else if (text.contains("极其重要紧急") || text.contains("传说") || text.contains("legendary")) levelIndex = 4;
     }
 
-    // Check deadline keywords
     if (text.contains("今天") || text.contains("today")) {
-      deadline = DateTime.now().add(const Duration(hours: 4)); // Today, say 4 hours from now
+      deadline = DateTime.now().add(const Duration(hours: 4));
     } else if (text.contains("明天") || text.contains("tomorrow")) {
-      deadline = DateTime.now().add(const Duration(days: 1)); // Tomorrow
+      deadline = DateTime.now().add(const Duration(days: 1));
     } else if (text.contains("后天") || text.contains("day after tomorrow")) {
       deadline = DateTime.now().add(const Duration(days: 2));
     }
 
-    // Clean up title by removing Level/Deadline keywords
-    taskTitle = taskTitle
+    String title = rawTitle
         .split(RegExp(r'(等级是|等级为|截止|截止日期是|时间是|级别是|level|deadline)'))[0]
         .trim();
 
-    if (taskTitle.isEmpty) {
-      SnackbarUtils.showError(title: 'error'.tr, message: 'Could not detect task title.');
+    if (title.isEmpty) {
+      SnackbarUtils.showError(title: 'error'.tr, message: 'error_no_title'.tr);
       return;
     }
 
-    _createTaskFromVoice(taskTitle, levelIndex: levelIndex, deadline: deadline);
+    // 1. Create Check-in Habit
+    if (lowerText.contains("打卡") || lowerText.contains("习惯") || lowerText.contains("check-in") || lowerText.contains("habit")) {
+      _createCheckInFromVoice(title, levelIndex: levelIndex);
+      return;
+    }
+
+    // 2. Create Task (default fallback)
+    _createTaskFromVoice(title, levelIndex: levelIndex, deadline: deadline);
+  }
+
+  void _createCheckInFromVoice(String title, {int? levelIndex}) {
+    int finalLevel = levelIndex ?? 0;
+    
+    final newCheckIn = CheckInModel(
+      title: title,
+      levelIndex: finalLevel,
+    );
+
+    taskController.addCheckIn(newCheckIn);
+    SnackbarUtils.showSuccess(
+      title: 'success_habit_created'.tr,
+      message: 'Added check-in "$title"',
+    );
+    Navigator.pop(context);
   }
 
   void _createTaskFromVoice(String title, {int? levelIndex, DateTime? deadline, bool isImmediateComplete = false}) {
@@ -398,33 +400,45 @@ class _VoiceAssistantOverlayState extends State<VoiceAssistantOverlay> with Tick
                       const SizedBox(height: 20),
 
                       // Helper templates
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: isDark ? Colors.white.withOpacity(0.04) : Colors.black.withOpacity(0.03),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: isDark ? Colors.white10 : Colors.black12),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'voice_suggestions'.tr,
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: isDark ? Colors.white : Colors.black87,
-                                fontSize: 14,
-                                fontFamily: 'Inter',
-                              ),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: _buildSuggestionSection(
+                              icon: Icons.assignment,
+                              iconColor: Colors.orange,
+                              title: 'voice_sug_create_task'.tr,
+                              items: [
+                                'voice_sug_create_task_1'.tr,
+                                'voice_sug_create_task_2'.tr,
+                              ],
                             ),
-                            const SizedBox(height: 8),
-                            _buildSuggestionItem("“新建 去健身房，等级是 紧急，截止日期是 明天”"),
-                            const SizedBox(height: 4),
-                            _buildSuggestionItem("“我要打卡 喝一杯水”"),
-                            const SizedBox(height: 4),
-                            _buildSuggestionItem("“新建 读书” (将自动应用历史习惯设置)"),
-                          ],
-                        ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _buildSuggestionSection(
+                              icon: Icons.check_circle,
+                              iconColor: Colors.green,
+                              title: 'voice_sug_create_habit'.tr,
+                              items: [
+                                'voice_sug_create_habit_1'.tr,
+                                'voice_sug_create_habit_2'.tr,
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _buildSuggestionSection(
+                              icon: Icons.done_all,
+                              iconColor: Colors.blue,
+                              title: 'voice_sug_complete'.tr,
+                              items: [
+                                'voice_sug_complete_1'.tr,
+                                'voice_sug_complete_2'.tr,
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -437,26 +451,67 @@ class _VoiceAssistantOverlayState extends State<VoiceAssistantOverlay> with Tick
     );
   }
 
-  Widget _buildSuggestionItem(String text) {
+  Widget _buildSuggestionSection({
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required List<String> items,
+  }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    return GestureDetector(
-      onTap: () {
-        // Strip quotes and paste into simulation bar
-        final cleanText = text.replaceAll("“", "").replaceAll("”", "").split(" (")[0];
-        _textController.text = cleanText;
-        if (!_isListening) {
-          _startListening();
-        }
-        setState(() {});
-      },
-      child: Text(
-        text,
-        style: TextStyle(
-          color: isDark ? Colors.white70 : Colors.black87,
-          fontSize: 13,
-          fontFamily: 'Inter',
-          decoration: TextDecoration.underline,
-        ),
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+      decoration: BoxDecoration(
+        color: isDark ? Colors.white.withValues(alpha: 0.04) : Colors.black.withValues(alpha: 0.03),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: isDark ? Colors.white10 : Colors.black12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: iconColor, size: 16),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  title,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.white : Colors.black87,
+                    fontSize: 12,
+                    fontFamily: 'Inter',
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ...items.map((text) => Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: GestureDetector(
+              onTap: () {
+                final cleanText = text.replaceAll("“", "").replaceAll("”", "").split(" (")[0];
+                _textController.text = cleanText;
+                if (!_isListening) {
+                  _startListening();
+                }
+                setState(() {});
+              },
+              child: Text(
+                text,
+                style: TextStyle(
+                  color: isDark ? Colors.white70 : Colors.black87,
+                  fontSize: 11,
+                  fontFamily: 'Inter',
+                  decoration: TextDecoration.underline,
+                  height: 1.3,
+                ),
+              ),
+            ),
+          )).toList(),
+        ],
       ),
     );
   }

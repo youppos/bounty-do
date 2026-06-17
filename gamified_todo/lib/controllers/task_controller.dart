@@ -1,12 +1,14 @@
 import 'package:get/get.dart';
 import 'package:audioplayers/audioplayers.dart';
 import '../models/task_model.dart';
+import '../models/check_in_model.dart';
 import 'skill_controller.dart';
 import '../utils/snackbar_utils.dart';
 
 class TaskController extends GetxController {
   // 观察状态的响应式列表
   var tasks = <TaskModel>[].obs;
+  var checkIns = <CheckInModel>[].obs;
   
   // 用户的金币总数
   var totalCoins = 0.obs;
@@ -71,6 +73,7 @@ class TaskController extends GetxController {
     }
     // 模拟从数据库加载数据
     loadMockTasks();
+    loadMockCheckIns();
   }
 
   void _initAudio() {
@@ -192,14 +195,84 @@ class TaskController extends GetxController {
       // Fire and forget, but use preloaded source
       player.seek(Duration.zero).then((_) {
         player.resume();
+        Future.delayed(const Duration(milliseconds: 1500), () {
+          try {
+            player.stop();
+            player.setSource(AssetSource('audio/jackpot.wav'));
+          } catch (_) {}
+        });
       });
     } catch (e) {
       print('Error playing audio: $e');
     }
   }
 
+  void stopAllCoinSounds() {
+    for (var player in _audioPlayers) {
+      try {
+        player.stop();
+        player.setSource(AssetSource('audio/jackpot.wav'));
+      } catch (e) {
+        print('Error stopping audio: $e');
+      }
+    }
+  }
+
   // 删除任务
   void deleteTask(String id) {
     tasks.removeWhere((task) => task.id == id);
+  }
+
+  // 添加打卡项目
+  void addCheckIn(CheckInModel item) {
+    checkIns.add(item);
+  }
+
+  // 更新打卡项目
+  void updateCheckIn(String id, CheckInModel updatedItem) {
+    var index = checkIns.indexWhere((item) => item.id == id);
+    if (index != -1) {
+      checkIns[index] = updatedItem;
+    }
+  }
+
+  // 删除打卡项目
+  void deleteCheckIn(String id) {
+    checkIns.removeWhere((item) => item.id == id);
+  }
+
+  // 切换打卡完成状态
+  void toggleCheckInStatus(String id, String dateStr) {
+    var index = checkIns.indexWhere((item) => item.id == id);
+    if (index != -1) {
+      var item = checkIns[index];
+      var history = List<String>.from(item.history);
+      final isCompleted = history.contains(dateStr);
+      if (isCompleted) {
+        history.remove(dateStr);
+      } else {
+        history.add(dateStr);
+      }
+      checkIns[index] = item.copyWith(history: history);
+
+      if (!isCompleted) {
+        final reward = item.levelIndex == 0 ? 5 : 15;
+        Future.delayed(const Duration(milliseconds: 900), () {
+          totalCoins.value += reward;
+        });
+      } else {
+        final reward = item.levelIndex == 0 ? 5 : 15;
+        totalCoins.value -= reward;
+        if (totalCoins.value < 0) totalCoins.value = 0;
+      }
+    }
+  }
+
+  void loadMockCheckIns() {
+    checkIns.assignAll([
+      CheckInModel(title: '喝一杯水', levelIndex: 0),
+      CheckInModel(title: '锻炼30分钟', levelIndex: 1),
+      CheckInModel(title: '阅读30分钟', levelIndex: 0),
+    ]);
   }
 }

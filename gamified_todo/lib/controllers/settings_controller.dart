@@ -55,6 +55,7 @@ class SettingsController extends GetxController {
       _applyLanguage(lang);
     }
     isMuted.value = prefs.getBool('isMuted') ?? false;
+    soundMode.value = prefs.getInt('soundMode') ?? 0;
     taskLightEffect.value = prefs.getInt('taskLightEffect') ?? 0;
     taskBorderThickness.value = prefs.getInt('taskBorderThickness') ?? 1;
     selectedPresetIndex.value = prefs.getInt('selectedPresetIndex') ?? 1;
@@ -65,10 +66,24 @@ class SettingsController extends GetxController {
     }
   }
 
+  // 0: 开启, 1: 跟随系统, 2: 静音
+  var soundMode = 0.obs;
+
   Future<void> toggleMute() async {
-    isMuted.value = !isMuted.value;
+    soundMode.value = (soundMode.value + 1) % 3;
+    isMuted.value = (soundMode.value == 2);
     final prefs = await _prefs;
+    await prefs.setInt('soundMode', soundMode.value);
     await prefs.setBool('isMuted', isMuted.value);
+  }
+
+  String getSoundModeString() {
+    switch (soundMode.value) {
+      case 0: return 'sound_on'.tr;
+      case 1: return 'system_default'.tr;
+      case 2: return 'sound_off'.tr;
+      default: return 'sound_on'.tr;
+    }
   }
 
   Future<void> changeTaskLightEffect(int effectIndex) async {

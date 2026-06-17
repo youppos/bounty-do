@@ -15,16 +15,15 @@ import 'settings_screen.dart';
 import 'skills_screen.dart';
 import 'adventure_screen.dart';
 import 'calendar_screen.dart';
+import 'check_in_screen.dart';
+import '../../models/check_in_model.dart';
 import '../widgets/voice_assistant_overlay.dart';
 import '../theme/app_theme.dart';
-
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
-
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
-
 class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   final TaskController taskController = Get.find();
   final ThemeController themeController = Get.find();
@@ -34,21 +33,21 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   bool isGrid = false;
   int _currentIndex = 0;
   final List<Map<String, dynamic>> _flyingCoins = [];
+  bool _coinSoundPlayed = false;
   
   late final AnimationController _coinBarController;
   late final Animation<double> _coinBarScale;
-
   @override
   void initState() {
     super.initState();
     
     _coinBarController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 150),
+      duration: const Duration(milliseconds: 250),
     );
     
-    _coinBarScale = Tween<double>(begin: 1.0, end: 1.25).animate(
-      CurvedAnimation(parent: _coinBarController, curve: Curves.easeOut),
+    _coinBarScale = Tween<double>(begin: 1.0, end: 2.0).animate(
+      CurvedAnimation(parent: _coinBarController, curve: Curves.easeOutCubic),
     );
     
     _coinBarController.addStatusListener((status) {
@@ -57,25 +56,23 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       }
     });
   }
-
   @override
   void dispose() {
     _coinBarController.dispose();
     super.dispose();
   }
-
   void _toggleView() {
     setState(() {
       isGrid = !isGrid;
     });
   }
-
   void _spawnCoins(Offset startPosition, int reward) async {
     final targetPosition = Offset(
-      MediaQuery.of(context).size.width / 2,
-      MediaQuery.of(context).padding.top + 26
+      80.0,
+      MediaQuery.of(context).padding.top + 40
     );
     
+    _coinSoundPlayed = false; // Reset for new batch
     int coinCount = (reward / 10).ceil().clamp(1, 15).toInt();
     int delayMs = coinCount > 1 ? 80 : 0;
     
@@ -98,7 +95,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       }
     }
   }
-
   void _handleTaskToggle(TaskModel task, Offset tapPosition) {
     bool isBecomingCompleted = !task.isCompleted;
     
@@ -109,7 +105,58 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     
     taskController.toggleTaskCompletion(task.id);
   }
-
+  void _handleCheckInToggle(CheckInModel item, Offset tapPosition) {
+    final todayStr = DateTime.now().toString().split(' ')[0];
+    final isBecomingCompleted = !item.history.contains(todayStr);
+    if (isBecomingCompleted) {
+      final reward = item.levelIndex == 0 ? 5 : 15;
+      _spawnCoins(tapPosition, reward);
+    }
+    taskController.toggleCheckInStatus(item.id, todayStr);
+  }
+  void _showProfileBottomSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        return Container(
+          height: MediaQuery.of(context).size.height * 0.8,
+          decoration: BoxDecoration(
+            color: Theme.of(context).scaffoldBackgroundColor,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.15),
+                blurRadius: 20,
+                spreadRadius: 2,
+              )
+            ],
+          ),
+          child: Stack(
+            children: [
+              const ClipRRect(
+                borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
+                child: AdventureScreen(),
+              ),
+              Positioned(
+                right: 16,
+                top: 16,
+                child: CircleAvatar(
+                  backgroundColor: isDark ? Colors.white12 : Colors.black12,
+                  child: IconButton(
+                     icon: Icon(Icons.close, color: isDark ? Colors.white : Colors.black87),
+                     onPressed: () => Navigator.pop(context),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
   void _showAddTaskBottomSheet(BuildContext context) {
     final titleController = TextEditingController();
     final descController = TextEditingController();
@@ -136,7 +183,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             builder: (context, setModalState) {
               final minCoins = TaskModel.getMinCoinsForLevel(selectedLevel);
               final maxCoins = TaskModel.getMaxCoinsForLevel(selectedLevel);
-
               return Padding(
                 padding: const EdgeInsets.all(24),
                 child: SingleChildScrollView(
@@ -239,7 +285,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                           fontFamily: 'Inter',
                         ),
                       ),
-
                       const SizedBox(height: 16),
                       Text('time_setting'.tr, style: TextStyle(fontWeight: FontWeight.w600, color: isDark ? Colors.white : Colors.black87, fontFamily: 'Inter')),
                       const SizedBox(height: 8),
@@ -406,7 +451,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                               setModalState(() => titleError = true);
                               return;
                             }
-
                             // Check daily task limits before creation
                             if (!taskController.canCreateTaskToday()) {
                               Navigator.pop(context);
@@ -475,24 +519,21 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       },
     );
   }
-
-  void _showEditTaskBottomSheet(BuildContext context, TaskModel task) {
+  void _showEditTaskBottomSheet(BuildContext context, TaskModel task, {bool onlyTime = false}) {
     String title = task.title;
     String desc = task.description ?? "";
-    String coinStr = task.coinReward.toString();
     String timeOption = task.deadline == null ? "none" : "deadline";
     DateTime? selectedDeadline = task.deadline;
+    int selectedLevel = task.levelIndex;
     
     TextEditingController editTitleController = TextEditingController(text: title);
     TextEditingController editDescController = TextEditingController(text: desc);
-    TextEditingController editCoinController = TextEditingController(text: coinStr);
     
     bool titleError = false;
-    bool coinError = false;
-
     showDialog(
       context: context,
       builder: (context) {
+        final isDark = Theme.of(context).brightness == Brightness.dark;
         return Dialog(
           alignment: Alignment.topCenter,
           insetPadding: const EdgeInsets.only(top: 60, left: 16, right: 16, bottom: 16),
@@ -507,48 +548,80 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('edit_task'.tr, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, fontFamily: 'Inter')),
+                      Text(
+                        onlyTime ? 'set_time_first_title'.tr : 'edit_task'.tr,
+                        style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, fontFamily: 'Inter'),
+                      ),
                       const SizedBox(height: 24),
-                      TextField(
-                        controller: editTitleController,
-                        style: TextStyle(color: Theme.of(context).textTheme.bodyLarge?.color),
-                        decoration: InputDecoration(
-                          labelText: 'task_title'.tr,
-                          errorText: titleError ? 'required_field'.tr : null,
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                          prefixIcon: const Icon(Icons.title),
+                      if (!onlyTime) ...[
+                        TextField(
+                          controller: editTitleController,
+                          style: TextStyle(color: Theme.of(context).textTheme.bodyLarge?.color),
+                          decoration: InputDecoration(
+                            labelText: 'task_title'.tr,
+                            errorText: titleError ? 'required_field'.tr : null,
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                            prefixIcon: const Icon(Icons.title),
+                          ),
+                          onChanged: (val) {
+                            if (titleError) setModalState(() => titleError = false);
+                          },
                         ),
-                        onChanged: (val) {
-                          if (titleError) setModalState(() => titleError = false);
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      TextField(
-                        controller: editDescController,
-                        maxLines: 3,
-                        style: TextStyle(color: Theme.of(context).textTheme.bodyLarge?.color),
-                        decoration: InputDecoration(
-                          labelText: 'task_desc'.tr,
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                          prefixIcon: const Icon(Icons.description),
+                        const SizedBox(height: 16),
+                        TextField(
+                          controller: editDescController,
+                          maxLines: 3,
+                          style: TextStyle(color: Theme.of(context).textTheme.bodyLarge?.color),
+                          decoration: InputDecoration(
+                            labelText: 'task_desc'.tr,
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                            prefixIcon: const Icon(Icons.description),
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 16),
-                      TextField(
-                        controller: editCoinController,
-                        keyboardType: TextInputType.number,
-                        style: TextStyle(color: Theme.of(context).textTheme.bodyLarge?.color),
-                        decoration: InputDecoration(
-                          labelText: 'coin_reward'.tr,
-                          errorText: coinError ? 'max_10000'.tr : null,
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                          prefixIcon: Icon(Icons.monetization_on, color: Theme.of(context).primaryColor),
+                        const SizedBox(height: 16),
+                        Text(
+                          'priority'.tr,
+                          style: TextStyle(fontWeight: FontWeight.w600, color: isDark ? Colors.white : Colors.black87, fontFamily: 'Inter'),
                         ),
-                        onChanged: (val) {
-                          if (coinError) setModalState(() => coinError = false);
-                        },
-                      ),
-                      const SizedBox(height: 20),
+                        const SizedBox(height: 8),
+                        
+                        // Level Selector Row
+                        Row(
+                          children: List.generate(5, (idx) {
+                            final isSelected = selectedLevel == idx;
+                            final name = settingsController.getLevelName(idx);
+                            final color = TaskModel(title: '', coinReward: 0, levelIndex: idx).levelColor;
+                            return Expanded(
+                              child: GestureDetector(
+                                onTap: () => setModalState(() => selectedLevel = idx),
+                                child: Container(
+                                  margin: const EdgeInsets.symmetric(horizontal: 2),
+                                  padding: const EdgeInsets.symmetric(vertical: 8),
+                                  decoration: BoxDecoration(
+                                    color: isSelected ? color : color.withOpacity(0.12),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(color: color, width: 1.5),
+                                  ),
+                                  child: Center(
+                                    child: Text(
+                                      name,
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                        color: isSelected ? Colors.white : color,
+                                        fontFamily: 'Inter',
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            );
+                          }),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
                       Row(
                         children: [
                           Expanded(
@@ -632,28 +705,26 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                           ),
                           onPressed: () {
-                            if (editTitleController.text.trim().isEmpty) {
+                            if (!onlyTime && editTitleController.text.trim().isEmpty) {
                               setModalState(() => titleError = true);
                               return;
                             }
                             
-                            int parsedCoin = int.tryParse(editCoinController.text) ?? 10;
-                            if (parsedCoin > 10000) {
-                              setModalState(() => coinError = true);
-                              return;
+                            int defaultCoins = TaskModel.getMinCoinsForLevel(selectedLevel);
+                            if (timeOption == "deadline" && selectedDeadline != null) {
+                              defaultCoins = TaskModel.getMaxCoinsForLevel(selectedLevel);
                             }
-                            if (parsedCoin < 0) parsedCoin = 0;
                             
                             final reallyUpdatedTask = TaskModel(
                               id: task.id,
-                              title: editTitleController.text.trim(),
-                              description: editDescController.text.trim().isEmpty ? null : editDescController.text.trim(),
+                              title: onlyTime ? task.title : editTitleController.text.trim(),
+                              description: onlyTime ? task.description : (editDescController.text.trim().isEmpty ? null : editDescController.text.trim()),
                               isCompleted: task.isCompleted,
-                              coinReward: parsedCoin,
+                              coinReward: defaultCoins,
+                              levelIndex: selectedLevel,
                               createdAt: task.createdAt,
                               deadline: timeOption == "none" ? null : selectedDeadline,
                             );
-
                             taskController.updateTask(task.id, reallyUpdatedTask);
                             Navigator.pop(context);
                           },
@@ -671,65 +742,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       },
     );
   }
-
   Widget _buildLiquidGlassBackground() {
-    return Obx(() {
-      final themeIndex = themeController.currentThemeIndex.value;
-      final colors = AppTheme.getThemeBackgroundColors(themeIndex);
-      final isDark = Theme.of(context).brightness == Brightness.dark;
-      
-      return Stack(
-        children: [
-          Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: isDark 
-                    ? [colors[0].withOpacity(0.4), const Color(0xFF0C0910)]
-                    : [colors[0].withOpacity(0.2), const Color(0xFFF1F5F9)],
-              )
-            ),
-          ),
-          
-          Positioned(
-            top: -100,
-            left: -50,
-            child: Container(
-              width: 320,
-              height: 320,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: colors[1].withOpacity(isDark ? 0.35 : 0.45),
-              ),
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 90, sigmaY: 90),
-                child: const SizedBox.shrink(),
-              ),
-            ),
-          ),
-          
-          Positioned(
-            bottom: -80,
-            right: -80,
-            child: Container(
-              width: 350,
-              height: 350,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: colors[2].withOpacity(isDark ? 0.3 : 0.4),
-              ),
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 100, sigmaY: 100),
-                child: const SizedBox.shrink(),
-              ),
-            ),
-          ),
-        ],
-      );
-    });
+    return Container(
+      color: Theme.of(context).scaffoldBackgroundColor,
+    );
   }
-
   Widget _buildCurrentPage() {
     switch (_currentIndex) {
       case 0:
@@ -737,8 +754,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           length: 3,
           child: Column(
             children: [
-              _buildCoinDisplay(),
-              const SizedBox(height: 10),
               TabBar(
                 tabs: [
                   Tab(text: 'tab_in_progress'.tr),
@@ -763,16 +778,19 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           ),
         );
       case 1:
-        return const CalendarScreen();
+        return CheckInScreen(
+          onCheckIn: _handleCheckInToggle,
+        );
       case 2:
-        return const SkillsScreen();
+        return CalendarScreen(
+          onCompleteTask: _handleTaskToggle,
+        );
       case 3:
-        return const AdventureScreen();
+        return const SkillsScreen();
       default:
         return const SizedBox.shrink();
     }
   }
-
   void _showVoiceAssistantOverlay(BuildContext context) {
     showGeneralDialog(
       context: context,
@@ -784,39 +802,183 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       },
     );
   }
-
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     
     return Scaffold(
       extendBodyBehindAppBar: true,
+      extendBody: true,
       appBar: AppBar(
-        title: Text(
-          _currentIndex == 0
-              ? 'app_title'.tr
-              : (_currentIndex == 1 
-                  ? 'calendar_title'.tr
-                  : (_currentIndex == 2 ? 'nav_skills'.tr : 'nav_adventure'.tr)),
-          style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
-        ),
+        toolbarHeight: 60,
         backgroundColor: Colors.transparent,
         elevation: 0,
+        leadingWidth: 220,
+        leading: Obx(() {
+          final coins = taskController.totalCoins.value;
+          final level = taskController.userLevel;
+          final title = taskController.userTitle;
+          return GestureDetector(
+            onTap: () => _showProfileBottomSheet(context),
+            child: Padding(
+              padding: const EdgeInsets.only(left: 16, top: 2, bottom: 2),
+              child: Row(
+                children: [
+                  // Avatar with gold border
+                  Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [Colors.amber, Colors.orange.shade700],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.orange.withOpacity(0.3),
+                          blurRadius: 6,
+                          spreadRadius: 1,
+                        )
+                      ],
+                      border: Border.all(
+                        color: Colors.white.withOpacity(0.8),
+                        width: 1.5,
+                      ),
+                    ),
+                    child: const Center(
+                      child: Icon(Icons.person, color: Colors.white, size: 24),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  // 3-line status
+                  Expanded(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: isDark ? Colors.amberAccent : Colors.orange.shade800,
+                            fontFamily: 'Inter',
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                          decoration: BoxDecoration(
+                            color: Colors.orange.shade800,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            "Lv.$level",
+                            style: const TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                              height: 1.1,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        ScaleTransition(
+                          scale: _coinBarScale,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 14,
+                                height: 14,
+                                decoration: const BoxDecoration(
+                                  color: Colors.amber,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Center(
+                                  child: Text(
+                                    "\$",
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white,
+                                      height: 1.0,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 5),
+                              Text(
+                                "$coins",
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: isDark ? Colors.amberAccent : Colors.amber.shade800,
+                                  fontFamily: 'Inter',
+                                  height: 1.1,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }),
         actions: [
           if (_currentIndex == 0)
             IconButton(
-              icon: Icon(isGrid ? Icons.view_list : Icons.grid_view, color: Colors.white),
+              icon: Icon(isGrid ? Icons.view_list : Icons.grid_view, color: isDark ? Colors.white : Colors.black87),
               onPressed: _toggleView,
             ),
-          Obx(() => IconButton(
-            icon: Icon(
-              settingsController.isMuted.value ? Icons.volume_off : Icons.volume_up,
-              color: Colors.white,
-            ),
-            onPressed: () => settingsController.toggleMute(),
-          )),
+          Obx(() {
+            IconData icon;
+            switch (settingsController.soundMode.value) {
+              case 0:
+                icon = Icons.volume_up;
+                break;
+              case 1:
+                icon = Icons.volume_down;
+                break;
+              case 2:
+              default:
+                icon = Icons.volume_off;
+                break;
+            }
+            return IconButton(
+              icon: Icon(icon, color: isDark ? Colors.white : Colors.black87),
+              onPressed: () {
+                settingsController.toggleMute();
+                Get.closeAllSnackbars();
+                Get.rawSnackbar(
+                  message: '${'sound'.tr}: ${settingsController.getSoundModeString()}',
+                  duration: const Duration(seconds: 1),
+                  snackPosition: SnackPosition.BOTTOM,
+                  backgroundColor: isDark ? Colors.grey.shade900 : Colors.white,
+                  messageText: Text(
+                    '${'sound'.tr}: ${settingsController.getSoundModeString()}',
+                    style: TextStyle(
+                      color: isDark ? Colors.white : Colors.black87,
+                      fontWeight: FontWeight.w600,
+                      fontFamily: 'Inter',
+                    ),
+                  ),
+                  margin: const EdgeInsets.all(16),
+                  borderRadius: 12,
+                );
+              },
+            );
+          }),
           IconButton(
-            icon: const Icon(Icons.settings, color: Colors.white),
+            icon: Icon(Icons.settings, color: isDark ? Colors.white : Colors.black87),
             onPressed: () {
               Get.to(() => const SettingsScreen(), transition: Transition.cupertino);
             },
@@ -828,9 +990,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           _buildLiquidGlassBackground(),
           
           SafeArea(
+            bottom: false,
             child: _buildCurrentPage(),
           ),
-
           // Flying coins layer
           ..._flyingCoins.map((coin) {
             return FlyingCoinWidget(
@@ -844,174 +1006,261 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 if (_coinBarController.status != AnimationStatus.forward) {
                   _coinBarController.forward(from: 0);
                 }
-                if (!settingsController.isMuted.value) {
+                // Play sound only on the first coin arrival
+                if (!_coinSoundPlayed && !settingsController.isMuted.value) {
+                  _coinSoundPlayed = true;
                   taskController.playSingleCoinSound();
+                }
+                // Stop all sounds when the last coin finishes
+                if (_flyingCoins.isEmpty) {
+                  taskController.stopAllCoinSounds();
                 }
               },
             );
           }).toList(),
         ],
       ),
-      floatingActionButton: _currentIndex == 0 
-          ? Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                GestureDetector(
-                  onTap: () => _showVoiceAssistantOverlay(context),
-                  child: Container(
-                    width: 56, height: 56,
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Colors.purple, Colors.blue],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.blue.withOpacity(0.4),
-                          blurRadius: 8,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
+      floatingActionButton: (_currentIndex == 0 || _currentIndex == 1)
+          ? Obx(() {
+              final themeIndex = themeController.currentThemeIndex.value;
+              final fabColors = AppTheme.getFabGradientColors(themeIndex);
+              return GestureDetector(
+                onTap: () {
+                  if (_currentIndex == 0) {
+                    _showAddTaskBottomSheet(context);
+                  } else if (_currentIndex == 1) {
+                    showAddOrEditCheckInDialog(context, null);
+                  }
+                },
+                child: Container(
+                  width: 56, height: 56,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: fabColors,
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
                     ),
-                    child: const Icon(Icons.mic, color: Colors.white, size: 28),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                GestureDetector(
-                  onTap: () => _showAddTaskBottomSheet(context),
-                  child: Container(
-                    width: 56, height: 56,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          Theme.of(context).primaryColor,
-                          Theme.of(context).primaryColor.withOpacity(0.7),
-                        ],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: fabColors.first.withOpacity(0.4),
+                        blurRadius: 12,
+                        spreadRadius: 1,
+                        offset: const Offset(0, 4),
                       ),
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Theme.of(context).primaryColor.withOpacity(0.4),
-                          blurRadius: 8,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: const Icon(Icons.add, color: Colors.white, size: 28),
+                    ],
                   ),
+                  child: const Icon(Icons.add, color: Colors.white, size: 28),
                 ),
-              ],
-            )
+              );
+            })
           : null,
-      bottomNavigationBar: Obx(() {
-        final themeIndex = themeController.currentThemeIndex.value;
-        final colors = AppTheme.getThemeBackgroundColors(themeIndex);
-        
-        return ClipRRect(
-          borderRadius: const BorderRadius.only(
-            topLeft: Radius.circular(24),
-            topRight: Radius.circular(24),
-          ),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-            child: Container(
-              decoration: BoxDecoration(
-                color: isDark ? Colors.black.withOpacity(0.3) : Colors.white.withOpacity(0.55),
-                border: Border(
-                  top: BorderSide(color: Colors.white.withOpacity(0.15), width: 1.5),
+      bottomNavigationBar: ClipRect(
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 35, sigmaY: 35),
+          child: Container(
+            decoration: BoxDecoration(
+              color: isDark ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.4),
+              border: Border(
+                top: BorderSide(
+                  color: isDark ? Colors.white10 : Colors.black.withOpacity(0.05),
+                  width: 0.5,
                 ),
               ),
-              child: BottomNavigationBar(
-                currentIndex: _currentIndex,
-                onTap: (index) {
-                  setState(() {
-                    _currentIndex = index;
-                  });
-                },
-                type: BottomNavigationBarType.fixed,
-                backgroundColor: Colors.transparent,
-                elevation: 0,
-                selectedItemColor: Colors.amber.shade700,
-                unselectedItemColor: isDark ? Colors.white54 : Colors.black45,
-                selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold),
-                items: [
-                  BottomNavigationBarItem(
-                    icon: const Icon(Icons.assignment),
-                    label: 'nav_tasks'.tr,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 20,
+                  spreadRadius: 0,
+                  offset: const Offset(0, -5),
+                ),
+              ],
+            ),
+            child: SafeArea(
+              top: false,
+              child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: List.generate(5, (index) {
+                      // index 2 is the center mic button
+                      if (index == 2) {
+                        return GestureDetector(
+                          onTap: () => _showVoiceAssistantOverlay(context),
+                          child: Container(
+                            width: 48, height: 48,
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [Colors.purple, Colors.blue],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              ),
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.blue.withOpacity(0.35),
+                                  blurRadius: 10,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            child: const Icon(Icons.mic, color: Colors.white, size: 24),
+                          ),
+                        );
+                      }
+                      // Map dock index to page index (skip center mic slot)
+                      final int tabIndex = index < 2 ? index : index - 1;
+                      final isSelected = _currentIndex == tabIndex;
+                      
+                      IconData icon;
+                      IconData activeIcon;
+                      String label;
+                      
+                      switch (tabIndex) {
+                        case 0:
+                          icon = Icons.assignment_turned_in_outlined;
+                          activeIcon = Icons.assignment_turned_in;
+                          label = '待办';
+                          break;
+                        case 1:
+                          icon = Icons.alarm_on_outlined;
+                          activeIcon = Icons.alarm_on;
+                          label = '打卡';
+                          break;
+                        case 2:
+                          icon = Icons.calendar_month_outlined;
+                          activeIcon = Icons.calendar_month;
+                          label = '日程';
+                          break;
+                        case 3:
+                          icon = Icons.storefront_outlined;
+                          activeIcon = Icons.storefront;
+                          label = '商店';
+                          break;
+                        default:
+                          icon = Icons.help_outline;
+                          activeIcon = Icons.help;
+                          label = '';
+                      }
+                      
+                      final activeColor = Theme.of(context).primaryColor;
+                      
+                      return GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            _currentIndex = tabIndex;
+                          });
+                        },
+                        child: Container(
+                          color: Colors.transparent,
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Stack(
+                                clipBehavior: Clip.none,
+                                children: [
+                                  TweenAnimationBuilder<double>(
+                                    tween: Tween(begin: 1.0, end: isSelected ? 1.25 : 1.0),
+                                    duration: const Duration(milliseconds: 200),
+                                    curve: Curves.easeOutBack,
+                                    builder: (context, scale, child) {
+                                      return Transform.scale(
+                                        scale: scale,
+                                        child: Icon(
+                                          isSelected ? activeIcon : icon,
+                                          color: isSelected
+                                              ? activeColor
+                                              : (isDark ? Colors.white54 : Colors.black45),
+                                          size: 24,
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                  if (tabIndex == 0 || tabIndex == 1)
+                                    Positioned(
+                                      right: -8,
+                                      top: -6,
+                                      child: Obx(() {
+                                        int count = 0;
+                                        if (tabIndex == 0) {
+                                          count = taskController.tasks.where((t) => !t.isCompleted).length;
+                                        } else {
+                                          final todayStr = DateTime.now().toString().split(' ')[0];
+                                          count = taskController.checkIns.where((c) => !c.history.contains(todayStr)).length;
+                                        }
+                                        if (count <= 0) return const SizedBox.shrink();
+                                        return Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: Colors.red,
+                                            borderRadius: BorderRadius.circular(10),
+                                          ),
+                                          constraints: const BoxConstraints(
+                                            minWidth: 16,
+                                            minHeight: 16,
+                                          ),
+                                          child: Center(
+                                            child: Text(
+                                              count.toString(),
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 9,
+                                                fontWeight: FontWeight.bold,
+                                                height: 1.0,
+                                              ),
+                                            ),
+                                          ),
+                                        );
+                                      }),
+                                    ),
+                                ],
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                label,
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                  color: isSelected
+                                      ? activeColor
+                                      : (isDark ? Colors.white54 : Colors.black45),
+                                  fontFamily: 'Inter',
+                                ),
+                              ),
+                              const SizedBox(height: 3),
+                              AnimatedContainer(
+                                duration: const Duration(milliseconds: 250),
+                                curve: Curves.easeOutCubic,
+                                width: isSelected ? 16 : 0,
+                                height: 3,
+                                decoration: BoxDecoration(
+                                  color: activeColor,
+                                  borderRadius: BorderRadius.circular(1.5),
+                                  boxShadow: isSelected
+                                      ? [
+                                          BoxShadow(
+                                            color: activeColor.withOpacity(0.5),
+                                            blurRadius: 4,
+                                            spreadRadius: 0.5,
+                                          )
+                                        ]
+                                      : null,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }),
                   ),
-                  BottomNavigationBarItem(
-                    icon: const Icon(Icons.calendar_month),
-                    label: 'calendar_title'.tr,
-                  ),
-                  BottomNavigationBarItem(
-                    icon: const Icon(Icons.auto_awesome),
-                    label: 'nav_skills'.tr,
-                  ),
-                  BottomNavigationBarItem(
-                    icon: const Icon(Icons.person),
-                    label: 'nav_adventure'.tr,
-                  ),
-                ],
+                ),
               ),
             ),
           ),
-        );
-      }),
+        ),
     );
   }
-
-  Widget _buildCoinDisplay() {
-    return ScaleTransition(
-      scale: _coinBarScale,
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-        decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.3),
-          borderRadius: BorderRadius.circular(30),
-          border: Border.all(color: Colors.white.withOpacity(0.2)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Obx(() => Text(
-              taskController.userTitle,
-              style: const TextStyle(color: Colors.amber, fontWeight: FontWeight.bold, fontSize: 16, fontStyle: FontStyle.italic),
-            )),
-            const SizedBox(width: 8),
-            Obx(() => Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: Colors.amber.shade800,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(
-                "Lv.${taskController.userLevel}",
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14, fontFamily: 'Inter'),
-              ),
-            )),
-            const SizedBox(width: 8),
-            const Icon(Icons.monetization_on, color: Colors.amber, size: 32),
-            const SizedBox(width: 12),
-            Obx(() => AnimatedCoinCounter(
-              value: taskController.totalCoins.value,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
-                fontFamily: 'Inter',
-              ),
-            )),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildTaskList({required String filter}) {
     return Obx(() {
       final now = DateTime.now();
@@ -1024,7 +1273,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           return !t.isCompleted && (t.deadline == null || !t.deadline!.isBefore(now));
         }
       }).toList();
-
       if (filteredTasks.isEmpty) {
         final isDark = Theme.of(context).brightness == Brightness.dark;
         return Center(
@@ -1038,10 +1286,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           )
         );
       }
-
       if (isGrid) {
         return GridView.builder(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 2,
             childAspectRatio: 1.0,
@@ -1057,7 +1304,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               actionButton: GestureDetector(
                 onTap: () => taskController.deleteTask(task.id),
                 child: Container(
-                  margin: const EdgeInsets.only(bottom: 16, left: 6),
+                  margin: const EdgeInsets.only(bottom: 8, left: 6),
                   decoration: BoxDecoration(
                     color: Colors.red.shade600,
                     borderRadius: BorderRadius.circular(20),
@@ -1072,15 +1319,15 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 isGrid: true,
                 index: index,
                 onEdit: () => _showEditTaskBottomSheet(context, task),
+                onSetTime: () => _showEditTaskBottomSheet(context, task, onlyTime: true),
                 onComplete: (tapPosition) => _handleTaskToggle(task, tapPosition),
               ),
             );
           },
         );
       }
-
       return ListView.builder(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
         itemCount: filteredTasks.length,
         itemBuilder: (context, index) {
           var task = filteredTasks[index];
@@ -1090,7 +1337,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             actionButton: GestureDetector(
               onTap: () => taskController.deleteTask(task.id),
               child: Container(
-                margin: const EdgeInsets.only(bottom: 16, left: 6),
+                margin: const EdgeInsets.only(bottom: 8, left: 6),
                 decoration: BoxDecoration(
                   color: Colors.red.shade600,
                   borderRadius: BorderRadius.circular(20),
@@ -1105,6 +1352,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               isGrid: false,
               index: index,
               onEdit: () => _showEditTaskBottomSheet(context, task),
+              onSetTime: () => _showEditTaskBottomSheet(context, task, onlyTime: true),
               onComplete: (tapPosition) => _handleTaskToggle(task, tapPosition),
             ),
           );

@@ -13,6 +13,7 @@ class TaskCard extends StatefulWidget {
   final TaskModel task;
   final Function(Offset tapPosition) onComplete;
   final VoidCallback? onEdit;
+  final VoidCallback? onSetTime;
   final bool isGrid;
   final int index;
 
@@ -21,6 +22,7 @@ class TaskCard extends StatefulWidget {
     required this.task,
     required this.onComplete,
     this.onEdit,
+    this.onSetTime,
     this.isGrid = false,
     this.index = 0,
   });
@@ -175,12 +177,89 @@ class _TaskCardState extends State<TaskCard> with SingleTickerProviderStateMixin
     );
   }
 
+  void _showSetTimeGuidanceDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        return Dialog(
+          backgroundColor: isDark ? const Color(0xFF1E1E2E) : Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.access_time_rounded, size: 48, color: Colors.amber.shade700),
+                const SizedBox(height: 16),
+                Text(
+                  'set_time_first_title'.tr,
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.white : Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'set_time_first_msg'.tr,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: isDark ? Colors.white70 : Colors.black54,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextButton(
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            side: BorderSide(color: isDark ? Colors.white24 : Colors.black12),
+                          ),
+                        ),
+                        onPressed: () => Navigator.pop(context),
+                        child: Text(
+                          'cancel'.tr,
+                          style: TextStyle(color: isDark ? Colors.white70 : Colors.black54),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          backgroundColor: Colors.amber.shade700,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        onPressed: () {
+                          Navigator.pop(context);
+                          widget.onSetTime?.call();
+                        },
+                        child: Text('set_now'.tr),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     Color priorityColor = widget.task.levelColor;
     
     double width = MediaQuery.of(context).size.width - 32;
-    double height = widget.isGrid ? (width / 2 - 4) : width / 2.5; // Increased slightly for hints
+    double height = widget.isGrid ? (width / 2 - 4) : width / 3.6; // Increased slightly for hints
 
     return Obx(() {
       final effect = settingsController.taskLightEffect.value;
@@ -307,7 +386,7 @@ class _TaskCardState extends State<TaskCard> with SingleTickerProviderStateMixin
                                   ]
                                 ],
                               ),
-                              const SizedBox(height: 6),
+                              const SizedBox(height: 4),
                               Text(
                                 widget.task.title,
                                 style: TextStyle(
@@ -385,7 +464,7 @@ class _TaskCardState extends State<TaskCard> with SingleTickerProviderStateMixin
                                 ),
                             ],
                           ),
-                          const SizedBox(height: 6),
+                          const SizedBox(height: 4),
                           Row(
                             children: [
                               Icon(Icons.monetization_on, color: Theme.of(context).brightness == Brightness.light ? Colors.orange.shade800 : Colors.amber, size: 18),
@@ -437,6 +516,10 @@ class _TaskCardState extends State<TaskCard> with SingleTickerProviderStateMixin
                         ),
                         GestureDetector(
                           onTap: () {
+                            if (widget.task.deadline == null) {
+                              _showSetTimeGuidanceDialog(context);
+                              return;
+                            }
                             taskController.toggleAlarm(widget.task.id);
                             if (!widget.task.hasAlarm) {
                               SnackbarUtils.showSuccess(title: 'alarm_set'.tr, message: 'alarm_set_msg'.tr);
@@ -455,6 +538,10 @@ class _TaskCardState extends State<TaskCard> with SingleTickerProviderStateMixin
                         ),
                         GestureDetector(
                           onTap: () {
+                            if (widget.task.deadline == null) {
+                              _showSetTimeGuidanceDialog(context);
+                              return;
+                            }
                             taskController.toggleReminder(widget.task.id);
                             if (!widget.task.hasReminder) {
                               SnackbarUtils.showSuccess(title: 'reminder_set'.tr, message: 'reminder_set_msg'.tr);
@@ -487,7 +574,7 @@ class _TaskCardState extends State<TaskCard> with SingleTickerProviderStateMixin
                 minWidth: widget.isGrid ? height : width,
                 maxWidth: widget.isGrid ? height : width,
               ),
-              margin: const EdgeInsets.only(bottom: 16),
+              margin: const EdgeInsets.only(bottom: 4),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(21.5),
                 gradient: borderGradient,
@@ -521,7 +608,7 @@ class _TaskCardState extends State<TaskCard> with SingleTickerProviderStateMixin
                 minWidth: widget.isGrid ? height : width,
                 maxWidth: widget.isGrid ? height : width,
               ),
-              margin: const EdgeInsets.only(bottom: 16),
+              margin: const EdgeInsets.only(bottom: 4),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(20),
                 color: Theme.of(context).cardColor.withOpacity(0.2),
