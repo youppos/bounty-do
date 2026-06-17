@@ -748,30 +748,58 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
   Widget _buildCurrentPage() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     switch (_currentIndex) {
       case 0:
         return DefaultTabController(
           length: 3,
-          child: Column(
+          child: Stack(
             children: [
-              TabBar(
-                tabs: [
-                  Tab(text: 'tab_in_progress'.tr),
-                  Tab(text: 'tab_overdue'.tr),
-                  Tab(text: 'tab_completed'.tr),
+              TabBarView(
+                children: [
+                  _buildTaskList(filter: 'in_progress', topPadding: 50.0),
+                  _buildTaskList(filter: 'overdue', topPadding: 50.0),
+                  _buildTaskList(filter: 'completed', topPadding: 50.0),
                 ],
-                indicatorColor: Colors.amber,
-                labelColor: Colors.amber,
-                unselectedLabelColor: Theme.of(context).brightness == Brightness.dark ? Colors.white70 : Colors.black54,
-                dividerColor: Colors.transparent,
               ),
-              Expanded(
-                child: TabBarView(
-                  children: [
-                    _buildTaskList(filter: 'in_progress'),
-                    _buildTaskList(filter: 'overdue'),
-                    _buildTaskList(filter: 'completed'),
-                  ],
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: ClipRect(
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 35, sigmaY: 35),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: isDark ? Colors.black.withOpacity(0.05) : Colors.white.withOpacity(0.1),
+                        border: Border(
+                          bottom: BorderSide(
+                            color: isDark ? Colors.white10 : Colors.black.withOpacity(0.05),
+                            width: 0.5,
+                          ),
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.05),
+                            blurRadius: 20,
+                            spreadRadius: 0,
+                            offset: const Offset(0, 5),
+                          ),
+                        ],
+                      ),
+                      child: TabBar(
+                        tabs: [
+                          Tab(text: 'tab_in_progress'.tr),
+                          Tab(text: 'tab_overdue'.tr),
+                          Tab(text: 'tab_completed'.tr),
+                        ],
+                        indicatorColor: Colors.amber,
+                        labelColor: Colors.amber,
+                        unselectedLabelColor: isDark ? Colors.white70 : Colors.black54,
+                        dividerColor: Colors.transparent,
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ],
@@ -1060,7 +1088,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           filter: ImageFilter.blur(sigmaX: 35, sigmaY: 35),
           child: Container(
             decoration: BoxDecoration(
-              color: isDark ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.4),
+              color: isDark ? Colors.black.withOpacity(0.05) : Colors.white.withOpacity(0.1),
               border: Border(
                 top: BorderSide(
                   color: isDark ? Colors.white10 : Colors.black.withOpacity(0.05),
@@ -1261,7 +1289,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         ),
     );
   }
-  Widget _buildTaskList({required String filter}) {
+  Widget _buildTaskList({required String filter, double topPadding = 0}) {
     return Obx(() {
       final now = DateTime.now();
       final filteredTasks = taskController.tasks.where((t) {
@@ -1288,7 +1316,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       }
       if (isGrid) {
         return GridView.builder(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+          padding: EdgeInsets.fromLTRB(16, 16 + topPadding, 16, 100),
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 2,
             childAspectRatio: 1.0,
@@ -1327,7 +1355,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         );
       }
       return ListView.builder(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
+        padding: EdgeInsets.fromLTRB(16, 8 + topPadding, 16, 100),
         itemCount: filteredTasks.length,
         itemBuilder: (context, index) {
           var task = filteredTasks[index];
