@@ -893,6 +893,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                           style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.bold,
+                            fontStyle: FontStyle.italic,
                             color: isDark ? Colors.amberAccent : Colors.orange.shade800,
                             fontFamily: 'Inter',
                           ),
@@ -909,6 +910,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                             style: const TextStyle(
                               fontSize: 10,
                               fontWeight: FontWeight.bold,
+                              fontStyle: FontStyle.italic,
                               color: Colors.white,
                               height: 1.1,
                             ),
@@ -1116,7 +1118,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                         return GestureDetector(
                           onTap: () => _showVoiceAssistantOverlay(context),
                           child: Container(
-                            width: 48, height: 48,
+                            width: 56, height: 56,
                             decoration: BoxDecoration(
                               gradient: const LinearGradient(
                                 colors: [Colors.purple, Colors.blue],
@@ -1132,7 +1134,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                 ),
                               ],
                             ),
-                            child: const Icon(Icons.mic, color: Colors.white, size: 24),
+                            child: const Icon(Icons.mic, color: Colors.white, size: 30),
                           ),
                         );
                       }
@@ -1200,7 +1202,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                           color: isSelected
                                               ? activeColor
                                               : (isDark ? Colors.white54 : Colors.black45),
-                                          size: 24,
+                                          size: 28,
                                         ),
                                       );
                                     },
