@@ -156,7 +156,10 @@ class _CheckInScreenState extends State<CheckInScreen> {
                               ),
                             ),
                             const SizedBox(height: 6),
-                            Row(
+                            Wrap(
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              spacing: 8,
+                              runSpacing: 4,
                               children: [
                                 // Level Badge
                                 Container(
@@ -176,29 +179,36 @@ class _CheckInScreenState extends State<CheckInScreen> {
                                     ),
                                   ),
                                 ),
-                                const SizedBox(width: 8),
                                 // Reminder Time
-                                if (item.reminderTime != null) ...[
-                                  Icon(Icons.access_time, size: 12, color: isDark ? Colors.white60 : Colors.black54),
-                                  const SizedBox(width: 2),
-                                  Text(
-                                    item.reminderTime!,
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: isDark ? Colors.white60 : Colors.black54,
-                                    ),
+                                if (item.reminderTime != null)
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.access_time, size: 12, color: isDark ? Colors.white60 : Colors.black54),
+                                      const SizedBox(width: 2),
+                                      Text(
+                                        item.reminderTime!,
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: isDark ? Colors.white60 : Colors.black54,
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                  const SizedBox(width: 8),
-                                ],
                                 // History count
-                                Icon(Icons.calendar_today, size: 11, color: isDark ? Colors.white60 : Colors.black54),
-                                const SizedBox(width: 2),
-                                Text(
-                                  '已打卡 ${item.history.length} 天',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: isDark ? Colors.white60 : Colors.black54,
-                                  ),
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.calendar_today, size: 11, color: isDark ? Colors.white60 : Colors.black54),
+                                    const SizedBox(width: 2),
+                                    Text(
+                                      '已打卡 ${item.history.length} 天',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: isDark ? Colors.white60 : Colors.black54,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ],
                             ),
