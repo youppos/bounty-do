@@ -5,7 +5,7 @@ class ThemeController extends GetxController {
   var currentThemeIndex = 0.obs;
 
   void changeTheme(int index) {
-    if (index >= 0 && index < 5) {
+    if (index >= 0 && index < 10) {
       currentThemeIndex.value = index;
     }
   }
