@@ -9,6 +9,90 @@ import '../theme/app_theme.dart';
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
 
+  void _showGameplayGuide(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 500),
+            decoration: BoxDecoration(
+              color: isDark ? Colors.grey.shade900.withOpacity(0.95) : Colors.white.withOpacity(0.95),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: isDark ? Colors.white10 : Colors.black12),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.2),
+                  blurRadius: 15,
+                  offset: const Offset(0, 10),
+                )
+              ]
+            ),
+            padding: const EdgeInsets.all(24),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.sports_esports_rounded, color: Theme.of(context).primaryColor, size: 28),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'gameplay_guide_title'.tr,
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: isDark ? Colors.white : Colors.black87,
+                            fontFamily: 'Inter',
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        icon: Icon(Icons.close, color: isDark ? Colors.white60 : Colors.black54, size: 20),
+                        onPressed: () => Navigator.pop(context),
+                      )
+                    ],
+                  ),
+                  const Divider(height: 20, color: Colors.white24),
+                  Text(
+                    'gameplay_guide'.tr,
+                    style: TextStyle(
+                      fontSize: 14,
+                      height: 1.6,
+                      color: isDark ? Colors.white70 : Colors.black87,
+                      fontFamily: 'Inter',
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.pop(context),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Theme.of(context).primaryColor,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                      child: const Text('OK', style: TextStyle(fontWeight: FontWeight.bold)),
+                    ),
+                  )
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final settingsController = Get.find<SettingsController>();
@@ -27,6 +111,116 @@ class SettingsScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
         children: [
+          _buildSectionTitle('gameplay_guide_title'.tr, context),
+          _buildGroupContainer(
+            context: context,
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () => _showGameplayGuide(context),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                  child: Row(
+                    children: [
+                      Icon(Icons.help_center_rounded, color: Theme.of(context).primaryColor, size: 24),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'gameplay_guide_title'.tr,
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: Theme.of(context).textTheme.bodyLarge?.color,
+                            fontFamily: 'Inter',
+                          ),
+                        ),
+                      ),
+                      const Icon(Icons.arrow_forward_ios_rounded, color: Colors.grey, size: 16),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          
+          const SizedBox(height: 24),
+          _buildSectionTitle('preset_title'.tr, context),
+          _buildGroupContainer(
+            context: context,
+            child: Obx(() {
+              List<Widget> children = [];
+              final presetNames = [
+                '一般/重要/紧急/重要且紧急/极其重要紧急', // Eisenhower
+                '普通/优秀/稀有/史诗/传说', // RPG
+                '微耗能/轻度专注/深度专注/核心挑战/极限突破', // Focus
+                '日常琐事/自我提升/工作学习/关键里程碑/终极挑战', // Life Pillars
+                '★☆☆☆☆/★★☆☆☆/★★★☆☆/★★★★☆/★★★★★', // Stars
+                'preset_custom'.tr // Custom
+              ];
+              
+              for (int i = 0; i < presetNames.length; i++) {
+                children.add(_buildRadioRow(
+                  context: context,
+                  title: presetNames[i],
+                  isSelected: settingsController.selectedPresetIndex.value == i,
+                  onTap: () => settingsController.changePresetIndex(i),
+                  isLast: i == presetNames.length - 1 && settingsController.selectedPresetIndex.value != 5,
+                ));
+              }
+              
+              if (settingsController.selectedPresetIndex.value == 5) {
+                children.add(
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    color: isDark ? Colors.white.withOpacity(0.02) : Colors.black.withOpacity(0.01),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'preset_custom'.tr,
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: Theme.of(context).primaryColor,
+                            fontFamily: 'Inter',
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        ...List.generate(5, (levelIdx) {
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: Row(
+                              children: [
+                                Text('${levelIdx + 1}: ', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.grey, fontFamily: 'Inter')),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: TextField(
+                                    controller: settingsController.customNameControllers[levelIdx],
+                                    style: const TextStyle(fontSize: 15, fontFamily: 'Inter'),
+                                    decoration: InputDecoration(
+                                      isDense: true,
+                                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }),
+                      ],
+                    ),
+                  )
+                );
+              }
+              
+              return Column(children: children);
+            }),
+          ),
+
+          const SizedBox(height: 24),
           _buildSectionTitle('change_theme'.tr, context),
           _buildGroupContainer(
             context: context,
