@@ -5,11 +5,14 @@ import '../../controllers/task_controller.dart';
 import '../../controllers/settings_controller.dart';
 import '../../controllers/theme_controller.dart';
 import '../../models/task_model.dart';
+import '../../models/check_in_model.dart';
 import '../widgets/task_card.dart';
+import '../widgets/check_in_history_dialog.dart';
 
 class CalendarScreen extends StatefulWidget {
   final Function(TaskModel task, Offset tapPosition)? onCompleteTask;
-  const CalendarScreen({super.key, this.onCompleteTask});
+  final Function(CheckInModel item, Offset tapPosition)? onCompleteCheckIn;
+  const CalendarScreen({super.key, this.onCompleteTask, this.onCompleteCheckIn});
 
   @override
   State<CalendarScreen> createState() => _CalendarScreenState();
@@ -29,6 +32,9 @@ class _CalendarScreenState extends State<CalendarScreen> with SingleTickerProvid
   int _selectedFilterLevel = -1; // -1: All, 0-4: Level Index
   int _selectedCalendarTab = 0; // 0: 待办日程, 1: 打卡日程
   final FocusNode _searchFocusNode = FocusNode();
+  bool _isSelectionMode = false;
+  final Set<String> _selectedTaskIds = {};
+  final Set<String> _selectedCheckInIds = {};
 
   @override
   void initState() {
@@ -158,7 +164,7 @@ class _CalendarScreenState extends State<CalendarScreen> with SingleTickerProvid
     final themeIndex = themeController.currentThemeIndex.value;
     final activeBorderColor = _getActiveBorderColor(themeIndex, isDark);
 
-    return Column(
+    final mainWidget = Column(
       children: [
         // Sliding Tab Selector for "待办日程" and "打卡日程"
         Padding(
@@ -178,7 +184,14 @@ class _CalendarScreenState extends State<CalendarScreen> with SingleTickerProvid
               children: [
                 Expanded(
                   child: GestureDetector(
-                    onTap: () => setState(() => _selectedCalendarTab = 0),
+                    onTap: () {
+                      setState(() {
+                        _selectedCalendarTab = 0;
+                        _isSelectionMode = false;
+                        _selectedTaskIds.clear();
+                        _selectedCheckInIds.clear();
+                      });
+                    },
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 200),
                       decoration: BoxDecoration(
@@ -212,7 +225,14 @@ class _CalendarScreenState extends State<CalendarScreen> with SingleTickerProvid
                 ),
                 Expanded(
                   child: GestureDetector(
-                    onTap: () => setState(() => _selectedCalendarTab = 1),
+                    onTap: () {
+                      setState(() {
+                        _selectedCalendarTab = 1;
+                        _isSelectionMode = false;
+                        _selectedTaskIds.clear();
+                        _selectedCheckInIds.clear();
+                      });
+                    },
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 200),
                       decoration: BoxDecoration(
@@ -449,16 +469,17 @@ class _CalendarScreenState extends State<CalendarScreen> with SingleTickerProvid
                               child: Stack(
                                 alignment: Alignment.center,
                                 children: [
-                                  Positioned.fill(
-                                    child: CustomPaint(
-                                      painter: LiquidWavePainter(
-                                        fill: (taskCount / 10.0).clamp(0.0, 1.0),
-                                        phase: wavePhase + index * 0.5,
-                                        color: _getWaveColor(taskCount, isDark),
-                                        isSelected: isSelected,
+                                  if (_selectedCalendarTab == 0)
+                                    Positioned.fill(
+                                      child: CustomPaint(
+                                        painter: LiquidWavePainter(
+                                          fill: (taskCount / 10.0).clamp(0.0, 1.0),
+                                          phase: wavePhase + index * 0.5,
+                                          color: _getWaveColor(taskCount, isDark),
+                                          isSelected: isSelected,
+                                        ),
                                       ),
                                     ),
-                                  ),
                                   Column(
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
@@ -574,16 +595,17 @@ class _CalendarScreenState extends State<CalendarScreen> with SingleTickerProvid
                               child: Stack(
                                 alignment: Alignment.center,
                                 children: [
-                                  Positioned.fill(
-                                    child: CustomPaint(
-                                      painter: LiquidWavePainter(
-                                        fill: (taskCount / 10.0).clamp(0.0, 1.0),
-                                        phase: wavePhase + index * 0.5,
-                                        color: _getWaveColor(taskCount, isDark),
-                                        isSelected: isSelected,
+                                  if (_selectedCalendarTab == 0)
+                                    Positioned.fill(
+                                      child: CustomPaint(
+                                        painter: LiquidWavePainter(
+                                          fill: (taskCount / 10.0).clamp(0.0, 1.0),
+                                          phase: wavePhase + index * 0.5,
+                                          color: _getWaveColor(taskCount, isDark),
+                                          isSelected: isSelected,
+                                        ),
                                       ),
                                     ),
-                                  ),
                                   Column(
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
@@ -673,14 +695,44 @@ class _CalendarScreenState extends State<CalendarScreen> with SingleTickerProvid
                 itemCount: filteredTasks.length,
                 itemBuilder: (context, index) {
                   final task = filteredTasks[index];
-                  return TaskCard(
+                  final isSelected = _selectedTaskIds.contains(task.id);
+                  Widget card = TaskCard(
                     task: task,
                     isGrid: false,
                     index: index,
+                    isSelectionMode: _isSelectionMode,
+                    isSelected: isSelected,
                     onEdit: () => _showEditTaskBottomSheet(context, task),
                     onSetTime: () => _showEditTaskBottomSheet(context, task, onlyTime: true),
                     onComplete: (tapPosition) => _handleTaskToggle(task, tapPosition),
+                    onLongPress: () {
+                      setState(() {
+                        _isSelectionMode = true;
+                        _selectedTaskIds.add(task.id);
+                      });
+                    },
                   );
+
+                  if (_isSelectionMode) {
+                    return GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () {
+                        setState(() {
+                          if (isSelected) {
+                            _selectedTaskIds.remove(task.id);
+                            if (_selectedTaskIds.isEmpty) {
+                              _isSelectionMode = false;
+                            }
+                          } else {
+                            _selectedTaskIds.add(task.id);
+                          }
+                        });
+                      },
+                      child: card,
+                    );
+                  }
+
+                  return card;
                 },
               );
             } else {
@@ -731,114 +783,183 @@ class _CalendarScreenState extends State<CalendarScreen> with SingleTickerProvid
                 itemBuilder: (context, index) {
                   final item = list[index];
                   final isCompleted = item.history.contains(dateStr);
+                  final isSelected = _selectedCheckInIds.contains(item.id);
 
-                  return Container(
-                    margin: const EdgeInsets.symmetric(vertical: 6),
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    decoration: BoxDecoration(
-                      color: isCompleted
-                          ? (isDark ? Colors.green.withOpacity(0.12) : Colors.green.withOpacity(0.06))
-                          : (isDark ? Colors.white.withOpacity(0.04) : Colors.white.withOpacity(0.5)),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
+                  Widget card = GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: _isSelectionMode
+                        ? () {
+                            setState(() {
+                              if (isSelected) {
+                                _selectedCheckInIds.remove(item.id);
+                                if (_selectedCheckInIds.isEmpty) {
+                                  _isSelectionMode = false;
+                                }
+                              } else {
+                                _selectedCheckInIds.add(item.id);
+                              }
+                            });
+                          }
+                        : null,
+                    onLongPress: _isSelectionMode
+                        ? null
+                        : () {
+                            setState(() {
+                              _isSelectionMode = true;
+                              _selectedCheckInIds.add(item.id);
+                            });
+                          },
+                    child: Container(
+                      margin: const EdgeInsets.symmetric(vertical: 6),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      decoration: BoxDecoration(
                         color: isCompleted
-                            ? Colors.green.withOpacity(0.3)
-                            : (isDark ? Colors.white10 : Colors.black.withOpacity(0.04)),
-                        width: 1.0,
+                            ? (isDark ? Colors.green.withOpacity(0.12) : Colors.green.withOpacity(0.06))
+                            : (isDark ? Colors.white.withOpacity(0.04) : Colors.white.withOpacity(0.5)),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: isCompleted
+                              ? Colors.green.withOpacity(0.3)
+                              : (isDark ? Colors.white10 : Colors.black.withOpacity(0.04)),
+                          width: 1.0,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          if (_isSelectionMode) ...[
+                            Icon(
+                              isSelected ? Icons.check_box : Icons.check_box_outline_blank,
+                              color: isSelected ? primaryColor : Colors.grey,
+                              size: 22,
+                            ),
+                            const SizedBox(width: 12),
+                          ],
+                          Icon(
+                            isCompleted ? Icons.check_circle : Icons.radio_button_unchecked,
+                            color: isCompleted ? Colors.green : (isDark ? Colors.white38 : Colors.black38),
+                            size: 22,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  item.title,
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.bold,
+                                    color: isDark ? Colors.white : Colors.black87,
+                                    decoration: isCompleted ? TextDecoration.lineThrough : null,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  item.levelIndex == 0 ? '一般打卡 (5金币)' : '重要打卡 (15金币)',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: item.levelIndex == 0 ? Colors.blue : Colors.redAccent,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          // Check-in History Button
+                          if (!_isSelectionMode) ...[
+                            GestureDetector(
+                              onTap: () {
+                                showCheckInHistoryDialog(context, item);
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.03),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Icon(
+                                  Icons.calendar_month_outlined,
+                                  color: isDark ? Colors.white70 : Colors.black54,
+                                  size: 20,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                          ],
+                          GestureDetector(
+                            onTapDown: _isSelectionMode
+                                ? null
+                                : (details) {
+                                    if (isFuture) {
+                                      Get.snackbar('打卡失败', '不可提前对未来的日期打卡哦！', snackPosition: SnackPosition.BOTTOM);
+                                      return;
+                                    }
+                                    
+                                    if (isCompleted) {
+                                      taskController.toggleCheckInStatus(item.id, dateStr);
+                                    } else {
+                                      if (isToday && widget.onCompleteCheckIn != null) {
+                                        widget.onCompleteCheckIn!(item, details.globalPosition);
+                                      } else {
+                                        taskController.toggleCheckInStatus(item.id, dateStr);
+                                      }
+                                    }
+                                  },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: isCompleted
+                                    ? Colors.transparent
+                                    : (isFuture
+                                        ? Colors.grey.withOpacity(0.2)
+                                        : primaryColor),
+                                borderRadius: BorderRadius.circular(12),
+                                border: isCompleted
+                                    ? Border.all(color: Colors.green.withOpacity(0.5))
+                                    : null,
+                              ),
+                              child: Text(
+                                isCompleted
+                                    ? '已打卡'
+                                    : (isFuture ? '未开启' : (isToday ? '立即打卡' : '补签')),
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: isCompleted
+                                      ? Colors.green
+                                      : (isFuture ? Colors.white30 : Colors.white),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          isCompleted ? Icons.check_circle : Icons.radio_button_unchecked,
-                          color: isCompleted ? Colors.green : (isDark ? Colors.white38 : Colors.black38),
-                          size: 22,
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                item.title,
-                                style: TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.bold,
-                                  color: isDark ? Colors.white : Colors.black87,
-                                  decoration: isCompleted ? TextDecoration.lineThrough : null,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                item.levelIndex == 0 ? '一般打卡 (5金币)' : '重要打卡 (15金币)',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: item.levelIndex == 0 ? Colors.blue : Colors.redAccent,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        GestureDetector(
-                          onTapDown: (details) {
-                            if (isFuture) {
-                              Get.snackbar('打卡失败', '不可提前对未来的日期打卡哦！', snackPosition: SnackPosition.BOTTOM);
-                              return;
-                            }
-                            
-                            if (isCompleted) {
-                              taskController.toggleCheckInStatus(item.id, dateStr);
-                            } else {
-                              // Play coin drop animations only if completed for today
-                              if (isToday && widget.onCompleteTask != null) {
-                                final reward = item.levelIndex == 0 ? 5 : 15;
-                                final tempTask = TaskModel(
-                                  title: item.title,
-                                  coinReward: reward,
-                                  levelIndex: item.levelIndex,
-                                );
-                                widget.onCompleteTask!(tempTask, details.globalPosition);
-                              } else {
-                                taskController.toggleCheckInStatus(item.id, dateStr);
-                              }
-                            }
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: isCompleted
-                                  ? Colors.transparent
-                                  : (isFuture
-                                      ? Colors.grey.withOpacity(0.2)
-                                      : primaryColor),
-                              borderRadius: BorderRadius.circular(12),
-                              border: isCompleted
-                                  ? Border.all(color: Colors.green.withOpacity(0.5))
-                                  : null,
-                            ),
-                            child: Text(
-                              isCompleted
-                                  ? '已完成'
-                                  : (isFuture ? '未开启' : (isToday ? '立即打卡' : '补签')),
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                                color: isCompleted
-                                    ? Colors.green
-                                    : (isFuture ? Colors.white30 : Colors.white),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
                   );
+
+                  return card;
                 },
               );
             }
           }),
         ),
+      ],
+    );
+
+    return Stack(
+      children: [
+        mainWidget,
+        if (_isSelectionMode)
+          Positioned(
+            left: 16,
+            right: 16,
+            bottom: 80,
+            child: _buildBatchSelectBar(
+              onDelete: () {
+                _showDeleteConfirmationDialog();
+              },
+            ),
+          ),
       ],
     );
   }
@@ -1120,6 +1241,162 @@ class _CalendarScreenState extends State<CalendarScreen> with SingleTickerProvid
           ),
         );
       },
+    );
+  }
+
+  void _showDeleteConfirmationDialog() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        final isTaskTab = _selectedCalendarTab == 0;
+        return AlertDialog(
+          backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Text(
+            isTaskTab ? '确定删除所选任务吗？' : '确定删除所选打卡项目吗？',
+            style: TextStyle(color: isDark ? Colors.white : Colors.black87),
+          ),
+          content: Text(
+            '删除后将无法恢复，确定要继续吗？',
+            style: TextStyle(color: isDark ? Colors.white70 : Colors.black54),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('取消'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              onPressed: () {
+                if (isTaskTab) {
+                  for (var id in _selectedTaskIds) {
+                    taskController.deleteTask(id);
+                  }
+                  setState(() {
+                    _selectedTaskIds.clear();
+                    _isSelectionMode = false;
+                  });
+                } else {
+                  for (var id in _selectedCheckInIds) {
+                    taskController.deleteCheckIn(id);
+                  }
+                  setState(() {
+                    _selectedCheckInIds.clear();
+                    _isSelectionMode = false;
+                  });
+                }
+                Navigator.pop(context);
+              },
+              child: const Text('确定'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildBatchSelectBar({required VoidCallback onDelete}) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = Theme.of(context).primaryColor;
+    
+    final List<String> allVisibleIds;
+    final Set<String> currentSelected;
+    
+    if (_selectedCalendarTab == 0) {
+      final filteredTasks = taskController.tasks.where((t) {
+        if (_selectedDate != null) {
+          final targetDate = t.deadline ?? t.createdAt;
+          if (!_isSameDay(targetDate, _selectedDate!)) return false;
+        }
+        if (_searchQuery.isNotEmpty) {
+          final matchTitle = t.title.toLowerCase().contains(_searchQuery);
+          final matchDesc = t.description?.toLowerCase().contains(_searchQuery) ?? false;
+          if (!matchTitle && !matchDesc) return false;
+        }
+        if (_selectedFilterLevel != -1 && t.levelIndex != _selectedFilterLevel) {
+          return false;
+        }
+        return true;
+      }).toList();
+      allVisibleIds = filteredTasks.map((t) => t.id).toList();
+      currentSelected = _selectedTaskIds;
+    } else {
+      allVisibleIds = taskController.checkIns.map((c) => c.id).toList();
+      currentSelected = _selectedCheckInIds;
+    }
+
+    final isAllSelected = allVisibleIds.isNotEmpty &&
+        allVisibleIds.every((id) => currentSelected.contains(id));
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      height: 60,
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xE61E1E2E) : const Color(0xE6FFFFFF),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: isDark ? Colors.white12 : Colors.black12,
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.15),
+            blurRadius: 15,
+            spreadRadius: 2,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          TextButton(
+            onPressed: () {
+              setState(() {
+                _isSelectionMode = false;
+                _selectedTaskIds.clear();
+                _selectedCheckInIds.clear();
+              });
+            },
+            child: Text(
+              'cancel'.tr,
+              style: TextStyle(color: isDark ? Colors.white70 : Colors.black54),
+            ),
+          ),
+          const Spacer(),
+          Text(
+            '已选择 ${currentSelected.length} 项',
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
+          const Spacer(),
+          TextButton(
+            onPressed: () {
+              setState(() {
+                if (isAllSelected) {
+                  for (var id in allVisibleIds) {
+                    currentSelected.remove(id);
+                  }
+                } else {
+                  currentSelected.addAll(allVisibleIds);
+                }
+              });
+            },
+            child: Text(
+              isAllSelected ? '取消全选' : '全选',
+              style: TextStyle(color: primaryColor),
+            ),
+          ),
+          const SizedBox(width: 8),
+          IconButton(
+            icon: const Icon(Icons.delete_outline, color: Colors.red),
+            onPressed: currentSelected.isEmpty ? null : onDelete,
+          ),
+        ],
+      ),
     );
   }
 }
