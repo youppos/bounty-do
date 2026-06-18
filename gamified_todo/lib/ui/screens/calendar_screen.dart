@@ -414,10 +414,10 @@ class _CalendarScreenState extends State<CalendarScreen> with SingleTickerProvid
                 // 2. Calendar view: Month grid or Week strip
                 if (!_isMonthView)
                   Container(
-                    height: 90,
+                    height: 70,
                     child: ListView.builder(
                       scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
                       itemCount: 7,
                       itemBuilder: (context, index) {
                         final days = _getWeekDays();
@@ -439,13 +439,13 @@ class _CalendarScreenState extends State<CalendarScreen> with SingleTickerProvid
                             });
                           },
                           child: Container(
-                            width: 60,
-                            margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                            width: 44,
+                            margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
                             decoration: BoxDecoration(
                               color: isToday
                                   ? primaryColor.withOpacity(0.15)
                                   : (isDark ? Colors.white.withOpacity(0.05) : Colors.white.withOpacity(0.7)),
-                              borderRadius: BorderRadius.circular(16),
+                              borderRadius: BorderRadius.circular(12),
                               border: Border.all(
                                 color: isSelected 
                                     ? activeBorderColor 
@@ -465,7 +465,7 @@ class _CalendarScreenState extends State<CalendarScreen> with SingleTickerProvid
                                   : null,
                             ),
                             child: ClipRRect(
-                              borderRadius: BorderRadius.circular(16),
+                              borderRadius: BorderRadius.circular(12),
                               child: Stack(
                                 alignment: Alignment.center,
                                 children: [
@@ -486,16 +486,16 @@ class _CalendarScreenState extends State<CalendarScreen> with SingleTickerProvid
                                       Text(
                                         weekdayName,
                                         style: TextStyle(
-                                          fontSize: 12,
+                                          fontSize: 11,
                                           fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
                                           color: isDark ? Colors.white70 : Colors.black54,
                                         ),
                                       ),
-                                      const SizedBox(height: 6),
+                                      const SizedBox(height: 3),
                                       Text(
                                         day.day.toString(),
                                         style: TextStyle(
-                                          fontSize: 20,
+                                          fontSize: 16,
                                           fontWeight: FontWeight.bold,
                                           color: isDark ? Colors.white : Colors.black87,
                                         ),
