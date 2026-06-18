@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:get/get.dart';
 import 'ui/theme/app_theme.dart';
 import 'controllers/theme_controller.dart';
@@ -27,15 +28,35 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final themeController = Get.find<ThemeController>();
+    final settingsController = Get.find<SettingsController>();
     
     return Obx(() {
+      Locale? targetLocale;
+      final lang = settingsController.selectedLanguage.value;
+      if (lang == 'zh_CN') {
+        targetLocale = const Locale('zh', 'CN');
+      } else if (lang == 'en_US') {
+        targetLocale = const Locale('en', 'US');
+      } else {
+        targetLocale = Get.deviceLocale;
+      }
+
       return GetMaterialApp(
         title: 'Bounty-Do',
         theme: AppTheme.themes[themeController.currentThemeIndex.value],
         debugShowCheckedModeBanner: false,
         translations: AppTranslations(),
-        locale: Get.deviceLocale, // Automatically picks up the system language
-        fallbackLocale: const Locale('en', 'US'), // Fallback to English
+        locale: targetLocale,
+        fallbackLocale: const Locale('en', 'US'),
+        localizationsDelegates: const [
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: const [
+          Locale('zh', 'CN'),
+          Locale('en', 'US'),
+        ],
         home: const HomeScreen(),
       );
     });
