@@ -41,6 +41,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
+    _currentIndex = settingsController.preferredDefaultTabIndex;
     
     _coinBarController = AnimationController(
       vsync: this,
@@ -1188,6 +1189,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                             _isSelectionMode = false;
                             _selectedTaskIds.clear();
                           });
+                          settingsController.recordTabClick(tabIndex);
                         },
                         child: Container(
                           color: Colors.transparent,

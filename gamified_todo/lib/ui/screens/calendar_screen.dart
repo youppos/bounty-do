@@ -858,6 +858,14 @@ class _CalendarScreenState extends State<CalendarScreen> with SingleTickerProvid
                   return false;
                 }
 
+                // Filter by calendar due date
+                if (_selectedDate != null) {
+                  final selectedMidnight = DateTime(_selectedDate!.year, _selectedDate!.month, _selectedDate!.day);
+                  if (!item.isDueOn(selectedMidnight)) {
+                    return false;
+                  }
+                }
+
                 return true;
               }).toList();
 

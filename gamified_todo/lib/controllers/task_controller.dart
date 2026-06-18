@@ -270,9 +270,19 @@ class TaskController extends GetxController {
 
   void loadMockCheckIns() {
     checkIns.assignAll([
-      CheckInModel(title: '喝一杯水', levelIndex: 0),
-      CheckInModel(title: '锻炼30分钟', levelIndex: 1),
-      CheckInModel(title: '阅读30分钟', levelIndex: 0),
+      CheckInModel(title: '喝一杯水', levelIndex: 0, frequencyType: 'daily'),
+      CheckInModel(
+        title: '锻炼30分钟', 
+        levelIndex: 1, 
+        frequencyType: 'weekly', 
+        weeklyDays: [1, 2, 3, 4, 5],
+      ),
+      CheckInModel(
+        title: '阅读30分钟', 
+        levelIndex: 0, 
+        frequencyType: 'weekly', 
+        weeklyDays: [6, 7],
+      ),
     ]);
   }
 }
