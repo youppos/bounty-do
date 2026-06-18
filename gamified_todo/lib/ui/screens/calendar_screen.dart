@@ -413,101 +413,106 @@ class _CalendarScreenState extends State<CalendarScreen> with SingleTickerProvid
 
                 // 2. Calendar view: Month grid or Week strip
                 if (!_isMonthView)
-                  Container(
-                    height: 70,
-                    child: ListView.builder(
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      itemCount: 7,
-                      itemBuilder: (context, index) {
-                        final days = _getWeekDays();
-                        final day = days[index];
-                        final isSelected = _selectedDate != null && _isSameDay(day, _selectedDate!);
-                        final isToday = _isSameDay(day, DateTime.now());
-                        final weekdayName = _getWeekdayName(day.weekday);
-                        final taskCount = _getTaskCountForDay(day);
-                        
-                        return GestureDetector(
-                          onTap: () {
-                            setState(() {
-                              if (_selectedDate != null && _isSameDay(day, _selectedDate!)) {
-                                _selectedDate = null;
-                              } else {
-                                _selectedDate = day;
-                                _focusedDate = day;
-                              }
-                            });
-                          },
-                          child: Container(
-                            width: 44,
-                            margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: isToday
-                                  ? primaryColor.withOpacity(0.15)
-                                  : (isDark ? Colors.white.withOpacity(0.05) : Colors.white.withOpacity(0.7)),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: isSelected 
-                                    ? activeBorderColor 
-                                    : (isToday 
-                                        ? primaryColor.withOpacity(0.5) 
-                                        : (isDark ? Colors.white12 : Colors.black.withOpacity(0.05))),
-                                width: isSelected ? 3.0 : 1.0,
-                              ),
-                              boxShadow: isSelected
-                                  ? [
-                                      BoxShadow(
-                                        color: activeBorderColor.withOpacity(0.4),
-                                        blurRadius: 10,
-                                        spreadRadius: 2,
-                                      )
-                                    ]
-                                  : null,
-                            ),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(12),
-                              child: Stack(
-                                alignment: Alignment.center,
-                                children: [
-                                  if (_selectedCalendarTab == 0)
-                                    Positioned.fill(
-                                      child: CustomPaint(
-                                        painter: LiquidWavePainter(
-                                          fill: (taskCount / 10.0).clamp(0.0, 1.0),
-                                          phase: wavePhase + index * 0.5,
-                                          color: _getWaveColor(taskCount, isDark),
-                                          isSelected: isSelected,
-                                        ),
-                                      ),
-                                    ),
-                                  Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Container(
+                      height: 70,
+                      child: Row(
+                        children: List.generate(7, (index) {
+                          final days = _getWeekDays();
+                          final day = days[index];
+                          final isSelected = _selectedDate != null && _isSameDay(day, _selectedDate!);
+                          final isToday = _isSameDay(day, DateTime.now());
+                          final weekdayName = _getWeekdayName(day.weekday);
+                          final taskCount = _getTaskCountForDay(day);
+                          
+                          return Expanded(
+                            child: GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  if (_selectedDate != null && _isSameDay(day, _selectedDate!)) {
+                                    _selectedDate = null;
+                                  } else {
+                                    _selectedDate = day;
+                                    _focusedDate = day;
+                                  }
+                                });
+                              },
+                              child: Container(
+                                margin: EdgeInsets.only(
+                                  right: index == 6 ? 0 : 8,
+                                  top: 4,
+                                  bottom: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: isToday
+                                      ? primaryColor.withOpacity(0.15)
+                                      : (isDark ? Colors.white.withOpacity(0.05) : Colors.white.withOpacity(0.7)),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: isSelected 
+                                        ? activeBorderColor 
+                                        : (isToday 
+                                            ? primaryColor.withOpacity(0.5) 
+                                            : (isDark ? Colors.white12 : Colors.black.withOpacity(0.05))),
+                                    width: isSelected ? 3.0 : 1.0,
+                                  ),
+                                  boxShadow: isSelected
+                                      ? [
+                                          BoxShadow(
+                                            color: activeBorderColor.withOpacity(0.4),
+                                            blurRadius: 10,
+                                            spreadRadius: 2,
+                                          )
+                                        ]
+                                      : null,
+                                ),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Stack(
+                                    alignment: Alignment.center,
                                     children: [
-                                      Text(
-                                        weekdayName,
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                                          color: isDark ? Colors.white70 : Colors.black54,
+                                      if (_selectedCalendarTab == 0)
+                                        Positioned.fill(
+                                          child: CustomPaint(
+                                            painter: LiquidWavePainter(
+                                              fill: (taskCount / 10.0).clamp(0.0, 1.0),
+                                              phase: wavePhase + index * 0.5,
+                                              color: _getWaveColor(taskCount, isDark),
+                                              isSelected: isSelected,
+                                            ),
+                                          ),
                                         ),
-                                      ),
-                                      const SizedBox(height: 3),
-                                      Text(
-                                        day.day.toString(),
-                                        style: TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.bold,
-                                          color: isDark ? Colors.white : Colors.black87,
-                                        ),
+                                      Column(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          Text(
+                                            weekdayName,
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                                              color: isDark ? Colors.white70 : Colors.black54,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 3),
+                                          Text(
+                                            day.day.toString(),
+                                            style: TextStyle(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.bold,
+                                              color: isDark ? Colors.white : Colors.black87,
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ],
                                   ),
-                                ],
+                                ),
                               ),
                             ),
-                          ),
-                        );
-                      },
+                          );
+                        }),
+                      ),
                     ),
                   )
                 else ...[
