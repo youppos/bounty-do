@@ -12,7 +12,8 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Initialize Controllers
-  Get.put(SettingsController());
+  final settingsController = Get.put(SettingsController());
+  await settingsController.initialization;
   Get.put(ThemeController());
   Get.put(SkillController());
   Get.put(TaskController());

@@ -378,7 +378,7 @@ class _VoiceAssistantOverlayState extends State<VoiceAssistantOverlay> with Tick
                                         controller: _textController,
                                         style: TextStyle(color: isDark ? Colors.white : Colors.black87, fontFamily: 'Inter'),
                                         decoration: InputDecoration(
-                                          hintText: 'Type voice simulation here...',
+                                          hintText: 'voice_simulation_hint'.tr,
                                           hintStyle: TextStyle(color: isDark ? Colors.white38 : Colors.black38),
                                           border: InputBorder.none,
                                         ),

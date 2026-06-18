@@ -1,9 +1,14 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class SettingsController extends GetxController {
   final _prefs = SharedPreferences.getInstance();
+  late final Future<void> initialization;
+  
+  // 用户导航栏点击计数，用于记录用户习惯 (0: 待办, 1: 打卡)
+  var tabClickCounts = <int, int>{}.obs;
   
   // 'system', 'en_US', 'zh_CN'
   var selectedLanguage = 'system'.obs;
@@ -29,7 +34,7 @@ class SettingsController extends GetxController {
   @override
   void onInit() {
     super.onInit();
-    _loadSettings().then((_) {
+    initialization = _loadSettings().then((_) {
       for (int i = 0; i < 5; i++) {
         customNameControllers[i].text = customLevelNames[i];
         customNameControllers[i].addListener(() {
@@ -64,6 +69,47 @@ class SettingsController extends GetxController {
     if (savedCustoms != null && savedCustoms.length == 5) {
       customLevelNames.assignAll(savedCustoms);
     }
+
+    // 加载用户习惯点击计数
+    String? habitJson = prefs.getString('user_tab_clicks');
+    if (habitJson != null) {
+      try {
+        final Map<String, dynamic> decoded = jsonDecode(habitJson);
+        final Map<int, int> loadedCounts = {};
+        decoded.forEach((key, value) {
+          final intKey = int.tryParse(key);
+          if (intKey != null && value is int) {
+            loadedCounts[intKey] = value;
+          }
+        });
+        tabClickCounts.assignAll(loadedCounts);
+      } catch (e) {
+        // Ignore error
+      }
+    }
+  }
+
+  Future<void> recordTabClick(int index) async {
+    // 目前只记录待办 (0) 和打卡 (1) 的习惯，未来可扩展
+    if (index == 0 || index == 1) {
+      tabClickCounts[index] = (tabClickCounts[index] ?? 0) + 1;
+      final prefs = await _prefs;
+      final Map<String, int> stringMap = {};
+      tabClickCounts.forEach((key, value) {
+        stringMap[key.toString()] = value;
+      });
+      await prefs.setString('user_tab_clicks', jsonEncode(stringMap));
+    }
+  }
+
+  int get preferredDefaultTabIndex {
+    final todoClicks = tabClickCounts[0] ?? 0;
+    final checkInClicks = tabClickCounts[1] ?? 0;
+    // 如果用户点击打卡的次数比较多，每次进入的时候就激活打卡导航
+    if (checkInClicks > todoClicks) {
+      return 1;
+    }
+    return 0;
   }
 
   // 0: 开启, 1: 跟随系统, 2: 静音
