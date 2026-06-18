@@ -35,6 +35,8 @@ class _CalendarScreenState extends State<CalendarScreen> with SingleTickerProvid
   bool _isSelectionMode = false;
   final Set<String> _selectedTaskIds = {};
   final Set<String> _selectedCheckInIds = {};
+  bool _isSearchExpanded = false;
+  final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
@@ -44,6 +46,11 @@ class _CalendarScreenState extends State<CalendarScreen> with SingleTickerProvid
       duration: const Duration(seconds: 4),
     )..repeat();
     _searchFocusNode.addListener(() {
+      if (!_searchFocusNode.hasFocus && _searchQuery.isEmpty && _isSearchExpanded) {
+        setState(() {
+          _isSearchExpanded = false;
+        });
+      }
       setState(() {});
     });
   }
@@ -52,6 +59,7 @@ class _CalendarScreenState extends State<CalendarScreen> with SingleTickerProvid
   void dispose() {
     _waveAnimationController.dispose();
     _searchFocusNode.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -268,54 +276,138 @@ class _CalendarScreenState extends State<CalendarScreen> with SingleTickerProvid
             ),
           ),
         ),
-        // 1. Search & Filter Bar
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 250),
-            curve: Curves.easeOutCubic,
-            height: (_searchFocusNode.hasFocus || _searchQuery.isNotEmpty) ? 46 : 36,
-            margin: EdgeInsets.symmetric(
-              horizontal: (_searchFocusNode.hasFocus || _searchQuery.isNotEmpty) ? 0 : 32,
-            ),
-            decoration: BoxDecoration(
-              color: isDark ? Colors.black26 : Colors.white60,
-              borderRadius: BorderRadius.circular((_searchFocusNode.hasFocus || _searchQuery.isNotEmpty) ? 16 : 18),
-              border: Border.all(color: Colors.white10),
-            ),
-            child: TextField(
-              focusNode: _searchFocusNode,
-              style: TextStyle(
-                color: isDark ? Colors.white : Colors.black87,
-                fontSize: (_searchFocusNode.hasFocus || _searchQuery.isNotEmpty) ? 14 : 13,
-              ),
-              onChanged: (val) {
-                setState(() {
-                  _searchQuery = val.trim().toLowerCase();
-                });
-              },
-              textAlignVertical: TextAlignVertical.center,
-              decoration: InputDecoration(
-                hintText: 'search_tasks'.tr,
-                hintStyle: TextStyle(
-                  color: isDark ? Colors.white54 : Colors.black45,
-                  fontSize: (_searchFocusNode.hasFocus || _searchQuery.isNotEmpty) ? 14 : 13,
-                ),
-                prefixIcon: const Icon(Icons.search, color: Colors.grey, size: 20),
-                border: InputBorder.none,
-                isDense: true,
-                contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-              ),
-            ),
-          ),
+        // Animated search input row (appears above filter chips when search is active)
+        AnimatedSize(
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeInOut,
+          child: _isSearchExpanded
+              ? Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 4, 24, 4),
+                  child: Container(
+                    height: 38,
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.white.withOpacity(0.04) : Colors.black.withOpacity(0.04),
+                      borderRadius: BorderRadius.circular(19),
+                      border: Border.all(
+                        color: primaryColor.withOpacity(0.3),
+                        width: 1.0,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        const SizedBox(width: 12),
+                        Icon(Icons.search, size: 16, color: primaryColor),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: TextField(
+                            controller: _searchController,
+                            focusNode: _searchFocusNode,
+                            style: TextStyle(
+                              color: isDark ? Colors.white : Colors.black87,
+                              fontSize: 13,
+                            ),
+                            onChanged: (val) {
+                              setState(() {
+                                _searchQuery = val.trim().toLowerCase();
+                              });
+                            },
+                            decoration: InputDecoration(
+                              hintText: 'search_tasks'.tr,
+                              hintStyle: TextStyle(
+                                color: isDark ? Colors.white54 : Colors.black45,
+                                fontSize: 13,
+                              ),
+                              border: InputBorder.none,
+                              isDense: true,
+                              contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                            ),
+                          ),
+                        ),
+                        if (_searchQuery.isNotEmpty)
+                          GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                _searchController.clear();
+                                _searchQuery = "";
+                              });
+                            },
+                            child: const Icon(Icons.close, size: 16, color: Colors.grey),
+                          ),
+                        const SizedBox(width: 12),
+                      ],
+                    ),
+                  ),
+                )
+              : const SizedBox.shrink(),
         ),
 
         // Level Filter chip row
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
           child: Row(
             children: [
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 200),
+                child: !_isSearchExpanded
+                    ? GestureDetector(
+                        key: const ValueKey('search_chip'),
+                        onTap: () {
+                          setState(() {
+                            _isSearchExpanded = true;
+                            Future.delayed(const Duration(milliseconds: 120), () {
+                              _searchFocusNode.requestFocus();
+                            });
+                          });
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: _searchQuery.isNotEmpty ? primaryColor.withOpacity(0.2) : Colors.transparent,
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: _searchQuery.isNotEmpty ? primaryColor : (isDark ? Colors.white30 : Colors.black26),
+                              width: 1.5,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.search,
+                                size: 16,
+                                color: _searchQuery.isNotEmpty 
+                                    ? primaryColor 
+                                    : (isDark ? Colors.white70 : Colors.black87),
+                              ),
+                              if (_searchQuery.isNotEmpty) ...[
+                                const SizedBox(width: 6),
+                                Text(
+                                  _searchQuery,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: primaryColor,
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                GestureDetector(
+                                  onTap: () {
+                                    setState(() {
+                                      _searchController.clear();
+                                      _searchQuery = "";
+                                    });
+                                  },
+                                  child: const Icon(Icons.close, size: 12, color: Colors.grey),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      )
+                    : const SizedBox.shrink(key: ValueKey('empty_search')),
+              ),
+              if (!_isSearchExpanded) const SizedBox(width: 8),
               _buildFilterChip(
                 label: 'view_all'.tr,
                 isSelected: _selectedFilterLevel == -1,
@@ -754,7 +846,20 @@ class _CalendarScreenState extends State<CalendarScreen> with SingleTickerProvid
                 isFuture = selectedMidnight.isAfter(todayMidnight);
               }
 
-              final list = taskController.checkIns;
+              final list = taskController.checkIns.where((item) {
+                // Filter by keyword search
+                if (_searchQuery.isNotEmpty) {
+                  final matchTitle = item.title.toLowerCase().contains(_searchQuery);
+                  if (!matchTitle) return false;
+                }
+
+                // Filter by level
+                if (_selectedFilterLevel != -1 && item.levelIndex != _selectedFilterLevel) {
+                  return false;
+                }
+
+                return true;
+              }).toList();
 
               if (list.isEmpty) {
                 return Center(
@@ -839,10 +944,22 @@ class _CalendarScreenState extends State<CalendarScreen> with SingleTickerProvid
                             ),
                             const SizedBox(width: 12),
                           ],
-                          Icon(
-                            isCompleted ? Icons.check_circle : Icons.radio_button_unchecked,
-                            color: isCompleted ? Colors.green : (isDark ? Colors.white38 : Colors.black38),
-                            size: 22,
+                          Container(
+                            width: 38,
+                            height: 38,
+                            decoration: BoxDecoration(
+                              color: isCompleted
+                                  ? Colors.green
+                                  : (isDark
+                                      ? _getIconColor(item.title, false).withOpacity(0.15)
+                                      : _getIconColor(item.title, false).withOpacity(0.1)),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              _getIconForTitle(item.title),
+                              color: isCompleted ? Colors.white : _getIconColor(item.title, false),
+                              size: 20,
+                            ),
                           ),
                           const SizedBox(width: 12),
                           Expanded(
@@ -859,13 +976,41 @@ class _CalendarScreenState extends State<CalendarScreen> with SingleTickerProvid
                                   ),
                                 ),
                                 const SizedBox(height: 4),
-                                Text(
-                                  item.levelIndex == 0 ? '一般打卡 (5金币)' : '重要打卡 (15金币)',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: item.levelIndex == 0 ? Colors.blue : Colors.redAccent,
-                                    fontWeight: FontWeight.w500,
-                                  ),
+                                Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: item.levelIndex == 0
+                                            ? Colors.blue.withOpacity(0.15)
+                                            : Colors.red.withOpacity(0.15),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Text(
+                                        item.levelIndex == 0 ? '一般' : '重要',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                          color: item.levelIndex == 0 ? Colors.blue : Colors.redAccent,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Icon(
+                                      Icons.monetization_on,
+                                      color: isDark ? Colors.amber : Colors.orange.shade800,
+                                      size: 13,
+                                    ),
+                                    const SizedBox(width: 2),
+                                    Text(
+                                      item.levelIndex == 0 ? '+1' : '+3',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                        color: isDark ? Colors.amber : Colors.orange.shade800,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ],
                             ),
@@ -1403,6 +1548,41 @@ class _CalendarScreenState extends State<CalendarScreen> with SingleTickerProvid
         ],
       ),
     );
+  }
+
+  IconData _getIconForTitle(String title) {
+    final t = title.toLowerCase();
+    if (t.contains('水') || t.contains('water') || t.contains('喝')) {
+      return Icons.local_drink;
+    } else if (t.contains('跑') || t.contains('运') || t.contains('锻炼') || t.contains('健身') || t.contains('gym') || t.contains('workout')) {
+      return Icons.directions_run;
+    } else if (t.contains('起') || t.contains('早') || t.contains('wake') || t.contains('morning')) {
+      return Icons.wb_sunny;
+    } else if (t.contains('书') || t.contains('读') || t.contains('read') || t.contains('学')) {
+      return Icons.menu_book;
+    } else if (t.contains('睡') || t.contains('晚') || t.contains('sleep') || t.contains('night')) {
+      return Icons.nights_stay;
+    } else if (t.contains('吃') || t.contains('餐') || t.contains('eat') || t.contains('food')) {
+      return Icons.restaurant;
+    }
+    return Icons.task_alt;
+  }
+
+  Color _getIconColor(String title, bool isSelected) {
+    if (isSelected) return Colors.white;
+    final t = title.toLowerCase();
+    if (t.contains('水') || t.contains('water') || t.contains('喝')) {
+      return Colors.blueAccent;
+    } else if (t.contains('跑') || t.contains('运') || t.contains('锻炼') || t.contains('健身') || t.contains('gym') || t.contains('workout')) {
+      return Colors.orangeAccent;
+    } else if (t.contains('起') || t.contains('早') || t.contains('wake') || t.contains('morning')) {
+      return Colors.amber;
+    } else if (t.contains('书') || t.contains('读') || t.contains('read') || t.contains('学')) {
+      return Colors.purpleAccent;
+    } else if (t.contains('睡') || t.contains('晚') || t.contains('sleep') || t.contains('night')) {
+      return Colors.indigoAccent;
+    }
+    return Colors.tealAccent;
   }
 }
 

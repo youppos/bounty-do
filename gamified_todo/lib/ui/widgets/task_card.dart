@@ -16,6 +16,9 @@ class TaskCard extends StatefulWidget {
   final VoidCallback? onSetTime;
   final bool isGrid;
   final int index;
+  final bool isSelectionMode;
+  final bool isSelected;
+  final VoidCallback? onLongPress;
 
   const TaskCard({
     super.key,
@@ -25,6 +28,9 @@ class TaskCard extends StatefulWidget {
     this.onSetTime,
     this.isGrid = false,
     this.index = 0,
+    this.isSelectionMode = false,
+    this.isSelected = false,
+    this.onLongPress,
   });
 
   @override
@@ -336,14 +342,21 @@ class _TaskCardState extends State<TaskCard> with SingleTickerProviderStateMixin
               filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
               child: Padding(
                 padding: const EdgeInsets.all(12.0),
-                child: IntrinsicHeight(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Expanded(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    if (widget.isSelectionMode) ...[
+                      Icon(
+                        widget.isSelected ? Icons.check_box : Icons.check_box_outline_blank,
+                        color: widget.isSelected ? priorityColor : Colors.grey,
+                        size: 22,
+                      ),
+                      const SizedBox(width: 8),
+                    ],
+                    Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        mainAxisAlignment: MainAxisAlignment.start,
                         children: [
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -464,7 +477,7 @@ class _TaskCardState extends State<TaskCard> with SingleTickerProviderStateMixin
                                 ),
                             ],
                           ),
-                          const SizedBox(height: 4),
+                          const SizedBox(height: 8),
                           Row(
                             children: [
                               Icon(Icons.monetization_on, color: Theme.of(context).brightness == Brightness.light ? Colors.orange.shade800 : Colors.amber, size: 18),
@@ -499,7 +512,7 @@ class _TaskCardState extends State<TaskCard> with SingleTickerProviderStateMixin
                     ),
                     const SizedBox(width: 8),
                     Column(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         GestureDetector(
                           onTapDown: (details) {
@@ -514,6 +527,7 @@ class _TaskCardState extends State<TaskCard> with SingleTickerProviderStateMixin
                             ),
                           ),
                         ),
+                        const SizedBox(height: 6),
                         GestureDetector(
                           onTap: () {
                             if (widget.task.deadline == null) {
@@ -536,6 +550,7 @@ class _TaskCardState extends State<TaskCard> with SingleTickerProviderStateMixin
                             ),
                           ),
                         ),
+                        const SizedBox(height: 6),
                         GestureDetector(
                           onTap: () {
                             if (widget.task.deadline == null) {
@@ -562,7 +577,6 @@ class _TaskCardState extends State<TaskCard> with SingleTickerProviderStateMixin
                     ),
                   ],
                 ),
-              ),
               ),
             ),
           );
@@ -595,7 +609,8 @@ class _TaskCardState extends State<TaskCard> with SingleTickerProviderStateMixin
                   ),
                   child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
-                    onTap: widget.onEdit,
+                    onTap: widget.isSelectionMode ? null : widget.onEdit,
+                    onLongPress: widget.isSelectionMode ? null : widget.onLongPress,
                     child: innerChild,
                   ),
                 ),
@@ -623,7 +638,8 @@ class _TaskCardState extends State<TaskCard> with SingleTickerProviderStateMixin
               ),
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
-                onTap: widget.onEdit,
+                onTap: widget.isSelectionMode ? null : widget.onEdit,
+                onLongPress: widget.isSelectionMode ? null : widget.onLongPress,
                 child: innerChild,
               ),
             );

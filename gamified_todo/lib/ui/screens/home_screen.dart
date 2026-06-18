@@ -32,8 +32,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   
   bool isGrid = false;
   int _currentIndex = 0;
+  bool _isSelectionMode = false;
+  final Set<String> _selectedTaskIds = {};
   final List<Map<String, dynamic>> _flyingCoins = [];
-  bool _coinSoundPlayed = false;
   
   late final AnimationController _coinBarController;
   late final Animation<double> _coinBarScale;
@@ -72,9 +73,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       MediaQuery.of(context).padding.top + 40
     );
     
-    _coinSoundPlayed = false; // Reset for new batch
-    int coinCount = (reward / 10).ceil().clamp(1, 15).toInt();
-    int delayMs = coinCount > 1 ? 80 : 0;
+    // Spawn exactly reward coins (clamped between 1 and 30 for safety and aesthetics)
+    int coinCount = reward.clamp(1, 30);
+    int delayMs = coinCount > 1 ? (600 ~/ coinCount).clamp(20, 80) : 0;
     
     final random = Random();
     
@@ -109,7 +110,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     final todayStr = DateTime.now().toString().split(' ')[0];
     final isBecomingCompleted = !item.history.contains(todayStr);
     if (isBecomingCompleted) {
-      final reward = item.levelIndex == 0 ? 5 : 15;
+      final reward = item.levelIndex == 0 ? 1 : 3;
       _spawnCoins(tapPosition, reward);
     }
     taskController.toggleCheckInStatus(item.id, todayStr);
@@ -808,10 +809,16 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       case 1:
         return CheckInScreen(
           onCheckIn: _handleCheckInToggle,
+          onSelectionModeChanged: (val) {
+            setState(() {
+              _isSelectionMode = val;
+            });
+          },
         );
       case 2:
         return CalendarScreen(
           onCompleteTask: _handleTaskToggle,
+          onCompleteCheckIn: _handleCheckInToggle,
         );
       case 3:
         return const SkillsScreen();
@@ -1036,9 +1043,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 if (_coinBarController.status != AnimationStatus.forward) {
                   _coinBarController.forward(from: 0);
                 }
-                // Play sound only on the first coin arrival
-                if (!_coinSoundPlayed && !settingsController.isMuted.value) {
-                  _coinSoundPlayed = true;
+                // Play sound for each coin arrival
+                if (!settingsController.isMuted.value) {
                   taskController.playSingleCoinSound();
                 }
                 // Stop all sounds when the last coin finishes
@@ -1050,7 +1056,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           }).toList(),
         ],
       ),
-      floatingActionButton: (_currentIndex == 0 || _currentIndex == 1)
+      floatingActionButton: (_currentIndex == 0 || _currentIndex == 1) && !_isSelectionMode
           ? Obx(() {
               final themeIndex = themeController.currentThemeIndex.value;
               final fabColors = AppTheme.getFabGradientColors(themeIndex);
@@ -1179,6 +1185,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                         onTap: () {
                           setState(() {
                             _currentIndex = tabIndex;
+                            _isSelectionMode = false;
+                            _selectedTaskIds.clear();
                           });
                         },
                         child: Container(
@@ -1316,8 +1324,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           )
         );
       }
+
+      Widget listWidget;
       if (isGrid) {
-        return GridView.builder(
+        listWidget = GridView.builder(
           padding: EdgeInsets.fromLTRB(16, 16 + topPadding, 16, 100),
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 2,
@@ -1328,6 +1338,44 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           itemCount: filteredTasks.length,
           itemBuilder: (context, index) {
             var task = filteredTasks[index];
+            final isSelected = _selectedTaskIds.contains(task.id);
+
+            Widget card = TaskCard(
+              task: task,
+              isGrid: true,
+              index: index,
+              isSelectionMode: _isSelectionMode,
+              isSelected: isSelected,
+              onEdit: () => _showEditTaskBottomSheet(context, task),
+              onSetTime: () => _showEditTaskBottomSheet(context, task, onlyTime: true),
+              onComplete: (tapPosition) => _handleTaskToggle(task, tapPosition),
+              onLongPress: () {
+                setState(() {
+                  _isSelectionMode = true;
+                  _selectedTaskIds.add(task.id);
+                });
+              },
+            );
+
+            if (_isSelectionMode) {
+              return GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () {
+                  setState(() {
+                    if (isSelected) {
+                      _selectedTaskIds.remove(task.id);
+                      if (_selectedTaskIds.isEmpty) {
+                        _isSelectionMode = false;
+                      }
+                    } else {
+                      _selectedTaskIds.add(task.id);
+                    }
+                  });
+                },
+                child: card,
+              );
+            }
+
             return SwipeToReveal(
               key: ValueKey(task.id),
               actionWidth: 140,
@@ -1344,50 +1392,210 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   ),
                 ),
               ),
-              child: TaskCard(
-                task: task,
-                isGrid: true,
-                index: index,
-                onEdit: () => _showEditTaskBottomSheet(context, task),
-                onSetTime: () => _showEditTaskBottomSheet(context, task, onlyTime: true),
-                onComplete: (tapPosition) => _handleTaskToggle(task, tapPosition),
+              child: card,
+            );
+          },
+        );
+      } else {
+        listWidget = ListView.builder(
+          padding: EdgeInsets.fromLTRB(16, 8 + topPadding, 16, 100),
+          itemCount: filteredTasks.length,
+          itemBuilder: (context, index) {
+            var task = filteredTasks[index];
+            final isSelected = _selectedTaskIds.contains(task.id);
+
+            Widget card = TaskCard(
+              task: task,
+              isGrid: false,
+              index: index,
+              isSelectionMode: _isSelectionMode,
+              isSelected: isSelected,
+              onEdit: () => _showEditTaskBottomSheet(context, task),
+              onSetTime: () => _showEditTaskBottomSheet(context, task, onlyTime: true),
+              onComplete: (tapPosition) => _handleTaskToggle(task, tapPosition),
+              onLongPress: () {
+                setState(() {
+                  _isSelectionMode = true;
+                  _selectedTaskIds.add(task.id);
+                });
+              },
+            );
+
+            if (_isSelectionMode) {
+              return GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () {
+                  setState(() {
+                    if (isSelected) {
+                      _selectedTaskIds.remove(task.id);
+                      if (_selectedTaskIds.isEmpty) {
+                        _isSelectionMode = false;
+                      }
+                    } else {
+                      _selectedTaskIds.add(task.id);
+                    }
+                  });
+                },
+                child: card,
+              );
+            }
+
+            return SwipeToReveal(
+              key: ValueKey(task.id),
+              actionWidth: 140,
+              actionButton: GestureDetector(
+                onTap: () => taskController.deleteTask(task.id),
+                child: Container(
+                  margin: const EdgeInsets.only(bottom: 8, left: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade600,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Center(
+                    child: Icon(Icons.delete, color: Colors.white, size: 48),
+                  ),
+                ),
               ),
+              child: card,
             );
           },
         );
       }
-      return ListView.builder(
-        padding: EdgeInsets.fromLTRB(16, 8 + topPadding, 16, 100),
-        itemCount: filteredTasks.length,
-        itemBuilder: (context, index) {
-          var task = filteredTasks[index];
-          return SwipeToReveal(
-            key: ValueKey(task.id),
-            actionWidth: 140,
-            actionButton: GestureDetector(
-              onTap: () => taskController.deleteTask(task.id),
-              child: Container(
-                margin: const EdgeInsets.only(bottom: 8, left: 6),
-                decoration: BoxDecoration(
-                  color: Colors.red.shade600,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: const Center(
-                  child: Icon(Icons.delete, color: Colors.white, size: 48),
-                ),
+
+      return Stack(
+        children: [
+          listWidget,
+          if (_isSelectionMode)
+            Positioned(
+              left: 16,
+              right: 16,
+              bottom: 80,
+              child: _buildBatchSelectBar(
+                allVisibleIds: filteredTasks.map((t) => t.id).toList(),
+                onDelete: () {
+                  _showDeleteTasksConfirmationDialog();
+                },
               ),
             ),
-            child: TaskCard(
-              task: task,
-              isGrid: false,
-              index: index,
-              onEdit: () => _showEditTaskBottomSheet(context, task),
-              onSetTime: () => _showEditTaskBottomSheet(context, task, onlyTime: true),
-              onComplete: (tapPosition) => _handleTaskToggle(task, tapPosition),
-            ),
-          );
-        },
+        ],
       );
     });
+  }
+
+  void _showDeleteTasksConfirmationDialog() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        return AlertDialog(
+          backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Text(
+            '确定删除所选任务吗？',
+            style: TextStyle(color: isDark ? Colors.white : Colors.black87),
+          ),
+          content: Text(
+            '删除后将无法恢复，确定要继续吗？',
+            style: TextStyle(color: isDark ? Colors.white70 : Colors.black54),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('取消'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              onPressed: () {
+                for (var id in _selectedTaskIds) {
+                  taskController.deleteTask(id);
+                }
+                setState(() {
+                  _selectedTaskIds.clear();
+                  _isSelectionMode = false;
+                });
+                Navigator.pop(context);
+              },
+              child: const Text('确定'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildBatchSelectBar({required List<String> allVisibleIds, required VoidCallback onDelete}) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = Theme.of(context).primaryColor;
+    final isAllSelected = allVisibleIds.isNotEmpty &&
+        allVisibleIds.every((id) => _selectedTaskIds.contains(id));
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      height: 60,
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xE61E1E2E) : const Color(0xE6FFFFFF),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: isDark ? Colors.white12 : Colors.black12,
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.15),
+            blurRadius: 15,
+            spreadRadius: 2,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          TextButton(
+            onPressed: () {
+              setState(() {
+                _isSelectionMode = false;
+                _selectedTaskIds.clear();
+              });
+            },
+            child: Text(
+              'cancel'.tr,
+              style: TextStyle(color: isDark ? Colors.white70 : Colors.black54),
+            ),
+          ),
+          const Spacer(),
+          Text(
+            '已选择 ${_selectedTaskIds.length} 项',
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
+          const Spacer(),
+          TextButton(
+            onPressed: () {
+              setState(() {
+                if (isAllSelected) {
+                  for (var id in allVisibleIds) {
+                    _selectedTaskIds.remove(id);
+                  }
+                } else {
+                  _selectedTaskIds.addAll(allVisibleIds);
+                }
+              });
+            },
+            child: Text(
+              isAllSelected ? '取消全选' : '全选',
+              style: TextStyle(color: primaryColor),
+            ),
+          ),
+          const SizedBox(width: 8),
+          IconButton(
+            icon: const Icon(Icons.delete_outline, color: Colors.red),
+            onPressed: _selectedTaskIds.isEmpty ? null : onDelete,
+          ),
+        ],
+      ),
+    );
   }
 }

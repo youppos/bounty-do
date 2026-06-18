@@ -66,7 +66,7 @@ class TaskController extends GetxController {
     if (isTesting) {
       totalCoins.value = 0;
     } else {
-      totalCoins.value = 15000; // Start with 15000 coins for testing
+      totalCoins.value = 3000; // Start with 3000 coins for testing
     }
     if (!isTesting) {
       _initAudio();
@@ -80,22 +80,22 @@ class TaskController extends GetxController {
     _audioPlayers.addAll(List.generate(5, (_) => AudioPlayer()));
     for (var player in _audioPlayers) {
       player.setReleaseMode(ReleaseMode.stop);
-      player.setSource(AssetSource('audio/jackpot.wav'));
+      player.setSource(AssetSource('audio/coin.wav'));
     }
   }
 
   void loadMockTasks() {
     final now = DateTime.now();
     tasks.assignAll([
-      TaskModel(title: 'Test 10 Coins (No Time)', coinReward: 10, levelIndex: 1),
-      TaskModel(title: 'Test 50 Coins (Overdue)', coinReward: 5, levelIndex: 1, deadline: now.subtract(const Duration(hours: 1))),
-      TaskModel(title: 'Test 100 Coins (Due soon)', coinReward: 15, levelIndex: 1, deadline: now.add(const Duration(hours: 2, minutes: 30))),
-      TaskModel(title: 'Test 200 Coins (Tomorrow)', coinReward: 15, levelIndex: 1, deadline: now.add(const Duration(days: 1, hours: 5))),
-      TaskModel(title: 'Test 500 Coins', coinReward: 15, levelIndex: 2),
-      TaskModel(title: 'Test 1000 Coins', coinReward: 30, levelIndex: 3),
-      TaskModel(title: 'Test 2000 Coins', coinReward: 60, levelIndex: 4),
-      TaskModel(title: 'Test 5000 Coins', coinReward: 100, levelIndex: 4),
-      TaskModel(title: 'Test 10000 Coins', coinReward: 100, levelIndex: 4),
+      TaskModel(title: 'Test 2 Coins (No Time)', coinReward: 2, levelIndex: 1),
+      TaskModel(title: 'Test 10 Coins (Overdue)', coinReward: 1, levelIndex: 1, deadline: now.subtract(const Duration(hours: 1))),
+      TaskModel(title: 'Test 20 Coins (Due soon)', coinReward: 3, levelIndex: 1, deadline: now.add(const Duration(hours: 2, minutes: 30))),
+      TaskModel(title: 'Test 40 Coins (Tomorrow)', coinReward: 3, levelIndex: 1, deadline: now.add(const Duration(days: 1, hours: 5))),
+      TaskModel(title: 'Test 100 Coins', coinReward: 3, levelIndex: 2),
+      TaskModel(title: 'Test 200 Coins', coinReward: 6, levelIndex: 3),
+      TaskModel(title: 'Test 400 Coins', coinReward: 12, levelIndex: 4),
+      TaskModel(title: 'Test 1000 Coins', coinReward: 20, levelIndex: 4),
+      TaskModel(title: 'Test 2000 Coins', coinReward: 20, levelIndex: 4),
     ]);
   }
 
@@ -195,10 +195,10 @@ class TaskController extends GetxController {
       // Fire and forget, but use preloaded source
       player.seek(Duration.zero).then((_) {
         player.resume();
-        Future.delayed(const Duration(milliseconds: 1500), () {
+        Future.delayed(const Duration(milliseconds: 800), () {
           try {
             player.stop();
-            player.setSource(AssetSource('audio/jackpot.wav'));
+            player.setSource(AssetSource('audio/coin.wav'));
           } catch (_) {}
         });
       });
@@ -211,7 +211,7 @@ class TaskController extends GetxController {
     for (var player in _audioPlayers) {
       try {
         player.stop();
-        player.setSource(AssetSource('audio/jackpot.wav'));
+        player.setSource(AssetSource('audio/coin.wav'));
       } catch (e) {
         print('Error stopping audio: $e');
       }
@@ -256,12 +256,12 @@ class TaskController extends GetxController {
       checkIns[index] = item.copyWith(history: history);
 
       if (!isCompleted) {
-        final reward = item.levelIndex == 0 ? 5 : 15;
+        final reward = item.levelIndex == 0 ? 1 : 3;
         Future.delayed(const Duration(milliseconds: 900), () {
           totalCoins.value += reward;
         });
       } else {
-        final reward = item.levelIndex == 0 ? 5 : 15;
+        final reward = item.levelIndex == 0 ? 1 : 3;
         totalCoins.value -= reward;
         if (totalCoins.value < 0) totalCoins.value = 0;
       }

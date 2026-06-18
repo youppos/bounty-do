@@ -14,11 +14,11 @@ class SkillController extends GetxController {
   var unlockedSkins = <int>[0, 1, 2, 3, 4, 5].obs;
 
   // Skill cost configurations
-  static const int costMidasTouch = 150;
-  static const int costShieldDiscipline = 100;
-  static const int costTimeSandglass = 200;
-  static const int costJackpotWheel = 50;
-  static const int costSkinUnlock = 800;
+  static const int costMidasTouch = 30;
+  static const int costShieldDiscipline = 20;
+  static const int costTimeSandglass = 40;
+  static const int costJackpotWheel = 10;
+  static const int costSkinUnlock = 160;
 
   // Check if Shield of Discipline is currently active
   bool get isShieldActive {
@@ -151,15 +151,15 @@ class SkillController extends GetxController {
     if (rand < 40) {
       wonCoins = 0;
     } else if (rand < 60) {
-      wonCoins = 10;
+      wonCoins = 2;
     } else if (rand < 80) {
-      wonCoins = 50;
+      wonCoins = 10;
     } else if (rand < 92) {
-      wonCoins = 100;
+      wonCoins = 20;
     } else if (rand < 98) {
-      wonCoins = 200;
+      wonCoins = 40;
     } else {
-      wonCoins = 300;
+      wonCoins = 60;
     }
     
     taskController.totalCoins.value += wonCoins;

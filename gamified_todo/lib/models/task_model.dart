@@ -32,22 +32,22 @@ class TaskModel {
   static int getMinCoinsForLevel(int level) {
     switch (level) {
       case 0: return 1;
-      case 1: return 5;
-      case 2: return 15;
-      case 3: return 30;
-      case 4: return 60;
+      case 1: return 1;
+      case 2: return 3;
+      case 3: return 6;
+      case 4: return 12;
       default: return 1;
     }
   }
 
   static int getMaxCoinsForLevel(int level) {
     switch (level) {
-      case 0: return 5;
-      case 1: return 15;
-      case 2: return 30;
-      case 3: return 60;
-      case 4: return 100;
-      default: return 5;
+      case 0: return 1;
+      case 1: return 3;
+      case 2: return 6;
+      case 3: return 12;
+      case 4: return 20;
+      default: return 1;
     }
   }
 
