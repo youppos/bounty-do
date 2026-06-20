@@ -7,7 +7,6 @@ import '../../models/task_model.dart';
 import '../../controllers/task_controller.dart';
 import '../../controllers/settings_controller.dart';
 import '../../controllers/skill_controller.dart';
-import '../../utils/snackbar_utils.dart';
 
 class TaskCard extends StatefulWidget {
   final TaskModel task;
@@ -96,6 +95,19 @@ class _TaskCardState extends State<TaskCard> with SingleTickerProviderStateMixin
     });
   }
 
+  String _formatRelativeTime(DateTime dateTime) {
+    final difference = DateTime.now().difference(dateTime);
+    if (difference.inMinutes < 1) {
+      return 'just_now'.tr;
+    } else if (difference.inHours < 1) {
+      return 'minutes_ago'.trParams({'mins': difference.inMinutes.toString()});
+    } else if (difference.inDays < 1) {
+      return 'hours_ago'.trParams({'hours': difference.inHours.toString()});
+    } else {
+      return 'days_ago'.trParams({'days': difference.inDays.toString()});
+    }
+  }
+
   String _formatDeadline(DateTime deadline) {
     final year = deadline.year.toString();
     final month = deadline.month.toString().padLeft(2, '0');
@@ -112,76 +124,6 @@ class _TaskCardState extends State<TaskCard> with SingleTickerProviderStateMixin
     });
   }
 
-  String _getCoinRewardHint() {
-    if (widget.task.deadline == null || widget.task.isCompleted) return "";
-    final now = DateTime.now();
-    if (now.isAfter(widget.task.deadline!)) {
-      return "";
-    }
-    
-    final totalDurationMs = widget.task.deadline!.difference(widget.task.createdAt).inMilliseconds;
-    final elapsedMs = now.difference(widget.task.createdAt).inMilliseconds;
-    
-    if (elapsedMs <= totalDurationMs * 0.25) {
-      final maxCoins = TaskModel.getMaxCoinsForLevel(widget.task.levelIndex);
-      final thresholdTime = widget.task.createdAt.add(Duration(milliseconds: (totalDurationMs * 0.25).toInt()));
-      final timeStr = "${thresholdTime.hour.toString().padLeft(2, '0')}:${thresholdTime.minute.toString().padLeft(2, '0')}";
-      return 'coin_decay_warning'.trParams({
-        'time': timeStr,
-        'coins': maxCoins.toString(),
-      });
-    } else {
-      final currentCoins = widget.task.calculateRewardAt(now);
-      return 'coin_current_warning'.trParams({
-        'coins': currentCoins.toString(),
-      });
-    }
-  }
-
-  // Helper to get task level badge properties using presets Custom names
-  Widget _buildLevelBadge(int levelIndex) {
-    String label = settingsController.getLevelName(levelIndex);
-    IconData icon = Icons.circle;
-    Color color = widget.task.levelColor;
-
-    switch (levelIndex) {
-      case 0:
-        icon = Icons.radio_button_unchecked;
-        break;
-      case 1:
-        icon = Icons.grade;
-        break;
-      case 2:
-        icon = Icons.shield;
-        break;
-      case 3:
-        icon = Icons.offline_bolt;
-        break;
-      case 4:
-        icon = Icons.emoji_events;
-        break;
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.15),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withOpacity(0.4), width: 1),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 10, color: color),
-          const SizedBox(width: 4),
-          Text(
-            label,
-            style: TextStyle(color: color, fontSize: 9, fontWeight: FontWeight.bold, fontFamily: 'Inter'),
-          ),
-        ],
-      ),
-    );
-  }
 
   void _showSetTimeGuidanceDialog(BuildContext context) {
     showDialog(
@@ -265,7 +207,7 @@ class _TaskCardState extends State<TaskCard> with SingleTickerProviderStateMixin
     Color priorityColor = widget.task.levelColor;
     
     double width = MediaQuery.of(context).size.width - 32;
-    double height = widget.isGrid ? (width / 2 - 4) : width / 3.6; // Increased slightly for hints
+    double height = widget.isGrid ? (width / 2 - 4) : 84.0; // Strictly fixed height for list mode
 
     return Obx(() {
       final effect = settingsController.taskLightEffect.value;
@@ -293,30 +235,291 @@ class _TaskCardState extends State<TaskCard> with SingleTickerProviderStateMixin
       }
       
       int finalDisplayReward = displayReward * doubleGoldMultiplier;
-      final hintText = _getCoinRewardHint();
+
+      // Define Rarity Icon
+      IconData rarityIcon = Icons.circle;
+      switch (widget.task.levelIndex) {
+        case 0:
+          rarityIcon = Icons.radio_button_unchecked;
+          break;
+        case 1:
+          rarityIcon = Icons.grade_rounded;
+          break;
+        case 2:
+          rarityIcon = Icons.shield_rounded;
+          break;
+        case 3:
+          rarityIcon = Icons.offline_bolt_rounded;
+          break;
+        case 4:
+          rarityIcon = Icons.emoji_events_rounded;
+          break;
+      }
+
+      final innerChild = ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14.0, vertical: 10.0),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                if (widget.isSelectionMode) ...[
+                  Icon(
+                    widget.isSelected ? Icons.check_box : Icons.check_box_outline_blank,
+                    color: widget.isSelected ? priorityColor : Colors.grey,
+                    size: 22,
+                  ),
+                  const SizedBox(width: 10),
+                ],
+                
+                // Left App-Icon Style Rarity Indicator (only in list mode)
+                if (!widget.isGrid) ...[
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: priorityColor.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Center(
+                      child: Icon(
+                        rarityIcon,
+                        color: priorityColor,
+                        size: 22,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                ],
+
+                // Middle Info Section
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      // Row 1: Rarity Tag + Overdue Info + Spacer + Time/Deadline
+                      Row(
+                        children: [
+                          Text(
+                            settingsController.getLevelName(widget.task.levelIndex),
+                            style: TextStyle(
+                              color: priorityColor,
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              fontFamily: 'Inter',
+                            ),
+                          ),
+                          if (isOverdue) ...[
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                              decoration: BoxDecoration(
+                                color: isShieldActive ? Colors.blue.withOpacity(0.2) : Colors.red.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                isShieldActive ? 'buff_shield'.tr : 'overdue'.tr,
+                                style: TextStyle(
+                                  color: isShieldActive ? Colors.blue : Colors.red,
+                                  fontSize: 8,
+                                  fontWeight: FontWeight.bold,
+                                  fontFamily: 'Inter',
+                                ),
+                              ),
+                            ),
+                          ],
+                          const Spacer(),
+                          // Time display on the right
+                          Obx(() {
+                            final showCountdown = taskController.showAsCountdown.value;
+                            String timeText = "";
+                            if (widget.task.deadline != null) {
+                              timeText = showCountdown
+                                  ? _formatCountdown(widget.task.deadline!)
+                                  : _formatDeadline(widget.task.deadline!);
+                            } else {
+                              timeText = _formatRelativeTime(widget.task.createdAt);
+                            }
+                            
+                            return Text(
+                              timeText,
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: isOverdue 
+                                    ? (isShieldActive ? Colors.blue : Colors.red) 
+                                    : (Theme.of(context).brightness == Brightness.dark ? Colors.white54 : Colors.black54),
+                                fontWeight: FontWeight.w500,
+                                fontFamily: 'Inter',
+                              ),
+                            );
+                          }),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      // Row 2: Title
+                      Text(
+                        widget.task.title,
+                        style: TextStyle(
+                          fontSize: widget.isGrid ? 14 : 15,
+                          fontWeight: FontWeight.bold,
+                          color: widget.task.isCompleted 
+                              ? Colors.grey 
+                              : (Theme.of(context).brightness == Brightness.dark ? Colors.white : Colors.black87),
+                          decoration: widget.task.isCompleted ? TextDecoration.lineThrough : null,
+                          fontFamily: 'Inter',
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 2),
+                      // Row 3: Coins & Icons
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.monetization_on, 
+                            color: Theme.of(context).brightness == Brightness.light ? Colors.orange.shade800 : Colors.amber, 
+                            size: 14,
+                          ),
+                          const SizedBox(width: 3),
+                          Text(
+                            "+$finalDisplayReward",
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: Theme.of(context).brightness == Brightness.light ? Colors.orange.shade800 : Colors.amber,
+                              fontFamily: 'Inter',
+                            ),
+                          ),
+                          if (doubleGoldMultiplier > 1) ...[
+                            const SizedBox(width: 4),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 0.5),
+                              decoration: BoxDecoration(
+                                color: Colors.amber.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: const Text(
+                                "x2",
+                                style: TextStyle(color: Colors.amber, fontSize: 8, fontWeight: FontWeight.w900),
+                              ),
+                            )
+                          ],
+                          
+                          const Spacer(),
+                          
+                          // Alarm / Notification Indicators
+                          if (widget.task.hasAlarm) ...[
+                            GestureDetector(
+                              onTap: () {
+                                taskController.toggleAlarm(widget.task.id);
+                              },
+                              child: Icon(
+                                Icons.alarm_on,
+                                color: widget.task.isCompleted ? Colors.grey : priorityColor,
+                                size: 14,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                          ],
+                          if (widget.task.hasReminder) ...[
+                            GestureDetector(
+                              onTap: () {
+                                taskController.toggleReminder(widget.task.id);
+                              },
+                              child: Icon(
+                                Icons.notifications_active,
+                                color: widget.task.isCompleted ? Colors.grey : priorityColor,
+                                size: 14,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                          ],
+                          
+                          // Tiny edit/setting indicators if not active
+                          if (!widget.task.hasAlarm && !widget.task.hasReminder) ...[
+                            GestureDetector(
+                              onTap: () {
+                                if (widget.task.deadline == null) {
+                                  _showSetTimeGuidanceDialog(context);
+                                  return;
+                                }
+                                taskController.toggleAlarm(widget.task.id);
+                              },
+                              child: Icon(
+                                Icons.alarm,
+                                color: Colors.grey.withOpacity(0.4),
+                                size: 14,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            GestureDetector(
+                              onTap: () {
+                                if (widget.task.deadline == null) {
+                                  _showSetTimeGuidanceDialog(context);
+                                  return;
+                                }
+                                taskController.toggleReminder(widget.task.id);
+                              },
+                              child: Icon(
+                                Icons.notifications_none,
+                                color: Colors.grey.withOpacity(0.4),
+                                size: 14,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                
+                const SizedBox(width: 12),
+                
+                // Right side complete button
+                GestureDetector(
+                  onTapDown: (details) {
+                    widget.onComplete(details.globalPosition);
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.all(4.0),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: widget.task.isCompleted 
+                          ? Colors.grey.withOpacity(0.1) 
+                          : priorityColor.withOpacity(0.1),
+                    ),
+                    child: Icon(
+                      widget.task.isCompleted ? Icons.check_circle : Icons.check_circle_outline,
+                      color: widget.task.isCompleted ? Colors.grey : priorityColor,
+                      size: 24,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
 
       return AnimatedBuilder(
         animation: _effectController,
         builder: (context, child) {
           double animValue = _effectController.value;
           
-          double baseThickness = 3.0;
-          int thicknessIndex = settingsController.taskBorderThickness.value;
-          if (thicknessIndex == 0) baseThickness = 1.5;
-          else if (thicknessIndex == 2) baseThickness = 5.0;
-
-          double borderOpacity = 0.5;
-          double shadowOpacity = 0.1;
-          double blurRadius = 10.0;
-          double spreadRadius = 2.0;
+          double baseThickness = 0.0; // Borders are cancelled by user request
+          double shadowOpacity = 0.06;
+          double blurRadius = 8.0;
+          double spreadRadius = 1.0;
           Gradient? borderGradient;
 
-          if (effect == 1) { // Breathing
+          if (effect == 1) { // Breathing (shadow glow pulses instead of border)
             double phaseOffset = (widget.index % 2 == 1) ? 0.5 : 0.0;
             double breathVal = (math.sin((animValue + phaseOffset) * 2 * math.pi) + 1) / 2;
-            borderOpacity = 0.2 + 0.6 * breathVal;
-            shadowOpacity = 0.05 + 0.2 * breathVal;
-            blurRadius = 10.0 + 10.0 * breathVal;
+            shadowOpacity = 0.04 + 0.12 * breathVal;
+            blurRadius = 8.0 + 8.0 * breathVal;
           } else if (effect == 2) { // Marquee
             borderGradient = SweepGradient(
               colors: [priorityColor.withOpacity(0.1), priorityColor, priorityColor.withOpacity(0.1)],
@@ -332,271 +535,27 @@ class _TaskCardState extends State<TaskCard> with SingleTickerProviderStateMixin
             );
           } else if (effect == 4) { // Pulse
             double pulse = (math.sin(animValue * 4 * math.pi) + 1) / 2;
-            spreadRadius = 1.0 + 4.0 * pulse;
-            borderOpacity = 0.3 + 0.5 * pulse;
+            spreadRadius = 0.5 + 2.0 * pulse;
+            shadowOpacity = 0.04 + 0.12 * pulse;
           }
-
-          final innerChild = ClipRRect(
-            borderRadius: BorderRadius.circular(20),
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-              child: Padding(
-                padding: const EdgeInsets.all(12.0),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    if (widget.isSelectionMode) ...[
-                      Icon(
-                        widget.isSelected ? Icons.check_box : Icons.check_box_outline_blank,
-                        color: widget.isSelected ? priorityColor : Colors.grey,
-                        size: 22,
-                      ),
-                      const SizedBox(width: 8),
-                    ],
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment: MainAxisAlignment.start,
-                        children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  _buildLevelBadge(widget.task.levelIndex),
-                                  if (isOverdue) ...[
-                                    const SizedBox(width: 6),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                      decoration: BoxDecoration(
-                                        color: isShieldActive ? Colors.blue.withOpacity(0.2) : Colors.red.withOpacity(0.2),
-                                        borderRadius: BorderRadius.circular(8),
-                                        border: Border.all(
-                                          color: isShieldActive ? Colors.blue.withOpacity(0.5) : Colors.red.withOpacity(0.5),
-                                        ),
-                                      ),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(
-                                            isShieldActive ? Icons.shield : Icons.warning_amber_rounded,
-                                            size: 10,
-                                            color: isShieldActive ? Colors.blue : Colors.red,
-                                          ),
-                                          const SizedBox(width: 3),
-                                          Text(
-                                            isShieldActive ? 'buff_shield'.tr : 'overdue'.tr,
-                                            style: TextStyle(
-                                              color: isShieldActive ? Colors.blue : Colors.red,
-                                              fontSize: 8,
-                                              fontWeight: FontWeight.bold,
-                                              fontFamily: 'Inter',
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    )
-                                  ]
-                                ],
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                widget.task.title,
-                                style: TextStyle(
-                                  fontSize: widget.isGrid ? 14 : 16,
-                                  fontWeight: FontWeight.bold,
-                                  color: widget.task.isCompleted 
-                                      ? Colors.grey 
-                                      : (Theme.of(context).brightness == Brightness.dark ? Colors.white : Colors.black87),
-                                  decoration: widget.task.isCompleted ? TextDecoration.lineThrough : null,
-                                  fontFamily: 'Inter',
-                                ),
-                                maxLines: widget.isGrid ? 1 : 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              Obx(() {
-                                final showCountdown = taskController.showAsCountdown.value;
-                                String timeText = "";
-                                if (widget.task.deadline != null) {
-                                  timeText = showCountdown
-                                      ? _formatCountdown(widget.task.deadline!)
-                                      : _formatDeadline(widget.task.deadline!);
-                                }
-                                
-                                if (timeText.isEmpty) return const SizedBox.shrink();
-
-                                return Padding(
-                                  padding: const EdgeInsets.only(top: 4.0),
-                                  child: Row(
-                                    children: [
-                                      Icon(
-                                        showCountdown ? Icons.timer_outlined : Icons.calendar_today_outlined,
-                                        size: 11,
-                                        color: isOverdue 
-                                            ? (isShieldActive ? Colors.blue : Colors.red) 
-                                            : (Theme.of(context).brightness == Brightness.dark ? Colors.white70 : Colors.black54),
-                                      ),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        timeText,
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          color: isOverdue 
-                                              ? (isShieldActive ? Colors.blue : Colors.red) 
-                                              : (Theme.of(context).brightness == Brightness.dark ? Colors.white70 : Colors.black54),
-                                          fontWeight: FontWeight.w600,
-                                          fontFamily: 'Inter',
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                );
-                              }),
-                              if (hintText.isNotEmpty)
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 4.0),
-                                  child: Row(
-                                    children: [
-                                      const Icon(Icons.flash_on, size: 11, color: Colors.amber),
-                                      const SizedBox(width: 4),
-                                      Expanded(
-                                        child: Text(
-                                          hintText,
-                                          style: TextStyle(
-                                            fontSize: 10,
-                                            color: Theme.of(context).brightness == Brightness.dark ? Colors.amber.shade200 : Colors.amber.shade900,
-                                            fontWeight: FontWeight.bold,
-                                            fontFamily: 'Inter',
-                                          ),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Row(
-                            children: [
-                              Icon(Icons.monetization_on, color: Theme.of(context).brightness == Brightness.light ? Colors.orange.shade800 : Colors.amber, size: 18),
-                              const SizedBox(width: 4),
-                              Text(
-                                "+$finalDisplayReward",
-                                style: TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.bold,
-                                  color: Theme.of(context).brightness == Brightness.light ? Colors.orange.shade800 : Colors.amber,
-                                  fontFamily: 'Inter',
-                                ),
-                              ),
-                              if (doubleGoldMultiplier > 1) ...[
-                                const SizedBox(width: 6),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                                  decoration: BoxDecoration(
-                                    color: Colors.amber.withOpacity(0.2),
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: const Text(
-                                    "x2",
-                                    style: TextStyle(color: Colors.amber, fontSize: 10, fontWeight: FontWeight.w900),
-                                  ),
-                                )
-                              ]
-                            ],
-                          )
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        GestureDetector(
-                          onTapDown: (details) {
-                            widget.onComplete(details.globalPosition);
-                          },
-                          child: Padding(
-                            padding: const EdgeInsets.all(4.0),
-                            child: Icon(
-                              widget.task.isCompleted ? Icons.check_circle : Icons.check_circle_outline,
-                              color: widget.task.isCompleted ? Colors.grey : priorityColor,
-                              size: 26,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        GestureDetector(
-                          onTap: () {
-                            if (widget.task.deadline == null) {
-                              _showSetTimeGuidanceDialog(context);
-                              return;
-                            }
-                            taskController.toggleAlarm(widget.task.id);
-                            if (!widget.task.hasAlarm) {
-                              SnackbarUtils.showSuccess(title: 'alarm_set'.tr, message: 'alarm_set_msg'.tr);
-                            }
-                          },
-                          child: Padding(
-                            padding: const EdgeInsets.all(4.0),
-                            child: Icon(
-                              widget.task.hasAlarm ? Icons.alarm_on : Icons.alarm,
-                              color: widget.task.isCompleted 
-                                  ? Colors.grey 
-                                  : (widget.task.hasAlarm ? priorityColor : (Theme.of(context).brightness == Brightness.dark ? Colors.white70 : Colors.black54)),
-                              size: 22,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        GestureDetector(
-                          onTap: () {
-                            if (widget.task.deadline == null) {
-                              _showSetTimeGuidanceDialog(context);
-                              return;
-                            }
-                            taskController.toggleReminder(widget.task.id);
-                            if (!widget.task.hasReminder) {
-                              SnackbarUtils.showSuccess(title: 'reminder_set'.tr, message: 'reminder_set_msg'.tr);
-                            }
-                          },
-                          child: Padding(
-                            padding: const EdgeInsets.all(4.0),
-                            child: Icon(
-                              widget.task.hasReminder ? Icons.notifications_active : Icons.notifications_none,
-                              color: widget.task.isCompleted 
-                                  ? Colors.grey 
-                                  : (widget.task.hasReminder ? priorityColor : (Theme.of(context).brightness == Brightness.dark ? Colors.white70 : Colors.black54)),
-                              size: 22,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          );
 
           if (effect == 2 || effect == 3) {
             return Container(
               constraints: BoxConstraints(
                 minHeight: height,
-                minWidth: widget.isGrid ? height : width,
-                maxWidth: widget.isGrid ? height : width,
+                maxHeight: height,
+                minWidth: widget.isGrid ? height : 0.0,
+                maxWidth: widget.isGrid ? height : double.infinity,
               ),
-              margin: const EdgeInsets.only(bottom: 4),
+              margin: EdgeInsets.only(bottom: widget.isGrid ? 4 : 8),
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(21.5),
+                borderRadius: BorderRadius.circular(16),
                 gradient: borderGradient,
                 boxShadow: [
                   BoxShadow(
-                    color: priorityColor.withOpacity(0.2),
-                    blurRadius: 15,
-                    spreadRadius: 1,
+                    color: priorityColor.withOpacity(shadowOpacity),
+                    blurRadius: blurRadius,
+                    spreadRadius: spreadRadius,
                   )
                 ]
               ),
@@ -604,8 +563,8 @@ class _TaskCardState extends State<TaskCard> with SingleTickerProviderStateMixin
                 padding: EdgeInsets.all(baseThickness),
                 child: Container(
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(20),
-                    color: Theme.of(context).cardColor.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(16),
+                    color: Theme.of(context).cardColor.withOpacity(Theme.of(context).brightness == Brightness.dark ? 0.4 : 0.7),
                   ),
                   child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
@@ -620,14 +579,14 @@ class _TaskCardState extends State<TaskCard> with SingleTickerProviderStateMixin
             return Container(
               constraints: BoxConstraints(
                 minHeight: height,
-                minWidth: widget.isGrid ? height : width,
-                maxWidth: widget.isGrid ? height : width,
+                maxHeight: height,
+                minWidth: widget.isGrid ? height : 0.0,
+                maxWidth: widget.isGrid ? height : double.infinity,
               ),
-              margin: const EdgeInsets.only(bottom: 4),
+              margin: EdgeInsets.only(bottom: widget.isGrid ? 4 : 8),
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(20),
-                color: Theme.of(context).cardColor.withOpacity(0.2),
-                border: Border.all(color: priorityColor.withOpacity(borderOpacity), width: baseThickness),
+                borderRadius: BorderRadius.circular(16),
+                color: Theme.of(context).cardColor.withOpacity(Theme.of(context).brightness == Brightness.dark ? 0.4 : 0.7),
                 boxShadow: [
                   BoxShadow(
                     color: priorityColor.withOpacity(shadowOpacity),
