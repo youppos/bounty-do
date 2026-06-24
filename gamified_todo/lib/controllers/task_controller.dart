@@ -1,9 +1,13 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:get/get.dart';
 import 'package:audioplayers/audioplayers.dart';
 import '../models/task_model.dart';
 import '../models/check_in_model.dart';
 import 'skill_controller.dart';
 import '../utils/snackbar_utils.dart';
+import '../ui/widgets/alarm_trigger_dialog.dart';
 
 class TaskController extends GetxController {
   // 观察状态的响应式列表
@@ -12,6 +16,12 @@ class TaskController extends GetxController {
   
   // 用户的金币总数
   var totalCoins = 0.obs;
+
+  // 闹钟控制与状态
+  final AudioPlayer _alarmPlayer = AudioPlayer();
+  final Rxn<TaskModel> activeAlarmTask = Rxn<TaskModel>();
+  Timer? _alarmCheckTimer;
+  final Set<String> _triggeredAlarmTaskIds = {};
   
   // 用户等级计算逻辑
   int get userLevel {
@@ -70,10 +80,29 @@ class TaskController extends GetxController {
     }
     if (!isTesting) {
       _initAudio();
+      _startAlarmCheckTimer();
     }
+    
+    // 监听闹钟触发
+    ever(activeAlarmTask, (task) {
+      if (task != null) {
+        Get.dialog(
+          AlarmTriggerDialog(task: task),
+          barrierDismissible: false,
+        );
+      }
+    });
+
     // 模拟从数据库加载数据
     loadMockTasks();
     loadMockCheckIns();
+  }
+
+  @override
+  void onClose() {
+    _alarmCheckTimer?.cancel();
+    _alarmPlayer.dispose();
+    super.onClose();
   }
 
   void _initAudio() {
@@ -284,5 +313,105 @@ class TaskController extends GetxController {
         weeklyDays: [6, 7],
       ),
     ]);
+  }
+
+  // 启动闹钟检测定时器
+  void _startAlarmCheckTimer() {
+    _alarmCheckTimer?.cancel();
+    _alarmCheckTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
+      _checkAlarms();
+    });
+  }
+
+  // 轮询检测是否到达截止时间
+  void _checkAlarms() {
+    if (activeAlarmTask.value != null) return; // 已经有闹钟在响，先不触发新的
+
+    final now = DateTime.now();
+    for (var task in tasks) {
+      if (task.hasAlarm && !task.isCompleted && task.deadline != null) {
+        if (now.isAfter(task.deadline!) && !_triggeredAlarmTaskIds.contains(task.id)) {
+          _triggeredAlarmTaskIds.add(task.id);
+          _triggerAlarm(task);
+          break; // 每次只触发一个闹钟
+        }
+      }
+    }
+  }
+
+  // 触发闹钟
+  void _triggerAlarm(TaskModel task) {
+    activeAlarmTask.value = task;
+    playAlarmSound(task);
+  }
+
+  // 播放闹钟铃声
+  Future<void> playAlarmSound(TaskModel task) async {
+    try {
+      await _alarmPlayer.stop();
+      _alarmPlayer.setReleaseMode(ReleaseMode.loop);
+
+      if (task.ringtoneType == 'custom') {
+        if (task.ringtoneBase64 != null) {
+          final Uint8List bytes = base64Decode(task.ringtoneBase64!);
+          await _alarmPlayer.play(BytesSource(bytes));
+        } else if (task.ringtonePath != null) {
+          await _alarmPlayer.play(DeviceFileSource(task.ringtonePath!));
+        } else {
+          // 备用播放默认铃声
+          await _alarmPlayer.play(AssetSource('audio/jackpot.wav'));
+        }
+      } else {
+        // 播放内置铃声
+        final path = task.ringtonePath ?? 'audio/jackpot.wav';
+        await _alarmPlayer.play(AssetSource(path));
+      }
+    } catch (e) {
+      print('Error playing alarm audio: $e');
+    }
+  }
+
+  // 停止播放闹钟铃声
+  Future<void> stopAlarmSound() async {
+    try {
+      await _alarmPlayer.stop();
+    } catch (e) {
+      print('Error stopping alarm audio: $e');
+    }
+  }
+
+  // 贪睡（延迟10分钟）
+  void snoozeAlarm(String id) {
+    var index = tasks.indexWhere((task) => task.id == id);
+    if (index != -1) {
+      stopAlarmSound();
+      activeAlarmTask.value = null;
+      // 顺延10分钟
+      tasks[index] = tasks[index].copyWith(
+        deadline: DateTime.now().add(const Duration(minutes: 10)),
+      );
+      // 移出已触发列表，使其到期时能再次触发
+      _triggeredAlarmTaskIds.remove(id);
+      Get.back(); // 关闭闹钟弹窗
+      SnackbarUtils.showInfo(
+        title: '闹钟已延迟',
+        message: '任务截止时间已延时10分钟。',
+      );
+    }
+  }
+
+  // 关闭/忽略闹钟（仅关闭声音和弹窗，保持任务未完成）
+  void dismissAlarm() {
+    stopAlarmSound();
+    activeAlarmTask.value = null;
+    Get.back(); // 关闭闹钟弹窗
+  }
+
+  // 立即完成任务（关闭闹钟并触发完成结算）
+  void completeAlarmTask(String id) {
+    stopAlarmSound();
+    activeAlarmTask.value = null;
+    Get.back(); // 关闭闹钟弹窗
+    toggleTaskCompletion(id);
   }
 }

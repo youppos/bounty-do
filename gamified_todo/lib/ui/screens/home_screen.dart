@@ -1,10 +1,13 @@
 import 'dart:math';
 import 'dart:ui';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:file_picker/file_picker.dart';
 import '../../controllers/task_controller.dart';
 import '../../controllers/theme_controller.dart';
 import '../../models/task_model.dart';
+import '../../utils/snackbar_utils.dart';
 import '../../controllers/settings_controller.dart';
 import '../../controllers/skill_controller.dart';
 import '../widgets/task_card.dart';
@@ -36,11 +39,13 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   final Set<String> _selectedTaskIds = {};
   final List<Map<String, dynamic>> _flyingCoins = [];
   
+  late TabController _tabController;
   late final AnimationController _coinBarController;
   late final Animation<double> _coinBarScale;
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 3, vsync: this);
     _currentIndex = settingsController.preferredDefaultTabIndex;
     
     _coinBarController = AnimationController(
@@ -60,6 +65,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
   @override
   void dispose() {
+    _tabController.dispose();
     _coinBarController.dispose();
     super.dispose();
   }
@@ -159,6 +165,35 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       },
     );
   }
+  Future<void> _pickCustomAudio(StateSetter setModalState, Function(String name, String? path, String? base64) onPicked) async {
+    try {
+      final FilePickerResult? result = await FilePicker.pickFiles(
+        type: FileType.audio,
+        allowMultiple: false,
+        withData: true,
+      );
+      if (result != null && result.files.isNotEmpty) {
+        final file = result.files.first;
+        final name = file.name;
+        final path = file.path;
+        String? base64Str;
+        if (file.bytes != null) {
+          if (file.bytes!.length > 1500000) {
+            SnackbarUtils.showError(
+              title: Get.locale?.languageCode == 'zh' ? '文件过大' : 'File Too Large',
+              message: Get.locale?.languageCode == 'zh' ? '请选择小于 1.5MB 的音频文件。' : 'Please select an audio file smaller than 1.5MB.',
+            );
+            return;
+          }
+          base64Str = base64Encode(file.bytes!);
+        }
+        onPicked(name, path, base64Str);
+      }
+    } catch (e) {
+      print('Error picking file: $e');
+    }
+  }
+
   void _showAddTaskBottomSheet(BuildContext context) {
     final titleController = TextEditingController();
     final descController = TextEditingController();
@@ -171,12 +206,23 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     DateTime? selectedDeadline;
     bool titleError = false;
     int selectedLevel = 1; // Default to Level 2 (Index 1)
+    bool hasAlarm = false;
+    bool hasReminder = false;
+    String ringtoneType = 'preset';
+    String ringtoneName = '宝藏金币 (默认)';
+    String? ringtonePath = 'audio/jackpot.wav';
+    String? ringtoneBase64;
+    bool isPreviewPlaying = false;
     
     showDialog(
       context: context,
       builder: (context) {
         final isDark = Theme.of(context).brightness == Brightness.dark;
-        return Dialog(
+        return PopScope(
+          onPopInvokedWithResult: (didPop, result) {
+            taskController.stopAlarmSound();
+          },
+          child: Dialog(
           alignment: Alignment.topCenter,
           insetPadding: const EdgeInsets.only(top: 60, left: 16, right: 16, bottom: 16),
           backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -301,7 +347,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                   side: BorderSide(color: timeOption == "none" ? Theme.of(context).primaryColor : Theme.of(context).dividerColor),
                                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                                 ),
-                                onPressed: () => setModalState(() => timeOption = "none"),
+                                onPressed: () => setModalState(() {
+                                  timeOption = "none";
+                                  hasAlarm = false;
+                                  hasReminder = false;
+                                }),
                                 child: Text('time_none'.tr, style: TextStyle(color: timeOption == "none" ? Theme.of(context).primaryColor : Theme.of(context).textTheme.bodyLarge?.color)),
                               ),
                             ),
@@ -419,6 +469,149 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                           ],
                         )
                       ],
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _buildToggleOption(
+                              context: context,
+                              icon: Icons.alarm,
+                              label: 'alarm'.tr,
+                              isActive: hasAlarm,
+                              isEnabled: timeOption != "none",
+                              onTap: () {
+                                setModalState(() {
+                                  hasAlarm = !hasAlarm;
+                                });
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _buildToggleOption(
+                              context: context,
+                              icon: Icons.notifications_none,
+                              label: 'reminder'.tr,
+                              isActive: hasReminder,
+                              isEnabled: timeOption != "none",
+                              onTap: () {
+                                setModalState(() {
+                                  hasReminder = !hasReminder;
+                                });
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (hasAlarm) ...[
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: isDark ? Colors.white.withOpacity(0.04) : Colors.black.withOpacity(0.03),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: isDark ? Colors.white10 : Colors.black.withOpacity(0.05)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                Get.locale?.languageCode == 'zh' ? '闹钟铃声设置' : 'Alarm Ringtone Settings',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                  color: isDark ? Colors.white70 : Colors.black87,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: DropdownButtonHideUnderline(
+                                      child: DropdownButton<String>(
+                                        value: ringtoneType == 'custom' ? 'custom' : ringtonePath,
+                                        dropdownColor: Theme.of(context).scaffoldBackgroundColor,
+                                        isExpanded: true,
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          color: isDark ? Colors.white : Colors.black87,
+                                          fontFamily: 'Inter',
+                                        ),
+                                        items: [
+                                          const DropdownMenuItem(
+                                            value: 'audio/jackpot.wav',
+                                            child: Text('🏆 宝藏金币 (默认)'),
+                                          ),
+                                          const DropdownMenuItem(
+                                            value: 'audio/coin.wav',
+                                            child: Text('✨ 闪耀金币'),
+                                          ),
+                                          DropdownMenuItem(
+                                            value: 'custom',
+                                            child: Text(ringtoneType == 'custom' ? '🎵 $ringtoneName' : '➕ 自定义本地音频...'),
+                                          ),
+                                        ],
+                                        onChanged: (val) async {
+                                          if (val == 'custom') {
+                                            await _pickCustomAudio(setModalState, (name, path, base64) {
+                                              setModalState(() {
+                                                ringtoneType = 'custom';
+                                                ringtoneName = name;
+                                                ringtonePath = path;
+                                                ringtoneBase64 = base64;
+                                                if (isPreviewPlaying) {
+                                                  isPreviewPlaying = false;
+                                                  taskController.stopAlarmSound();
+                                                }
+                                              });
+                                            });
+                                          } else if (val != null) {
+                                            setModalState(() {
+                                              ringtoneType = 'preset';
+                                              ringtoneName = val == 'audio/jackpot.wav' ? '宝藏金币 (默认)' : '闪耀金币';
+                                              ringtonePath = val;
+                                              ringtoneBase64 = null;
+                                              if (isPreviewPlaying) {
+                                                isPreviewPlaying = false;
+                                                taskController.stopAlarmSound();
+                                              }
+                                            });
+                                          }
+                                        },
+                                      ),
+                                    ),
+                                  ),
+                                  IconButton(
+                                    icon: Icon(
+                                      isPreviewPlaying ? Icons.stop_circle : Icons.play_circle_fill,
+                                      color: Theme.of(context).primaryColor,
+                                      size: 28,
+                                    ),
+                                    onPressed: () async {
+                                      setModalState(() {
+                                        isPreviewPlaying = !isPreviewPlaying;
+                                      });
+                                      if (isPreviewPlaying) {
+                                        final tempTask = TaskModel(
+                                          title: 'Preview',
+                                          coinReward: 0,
+                                          ringtoneType: ringtoneType,
+                                          ringtoneName: ringtoneName,
+                                          ringtonePath: ringtonePath,
+                                          ringtoneBase64: ringtoneBase64,
+                                        );
+                                        await taskController.playAlarmSound(tempTask);
+                                      } else {
+                                        await taskController.stopAlarmSound();
+                                      }
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 20),
                       Container(
                         width: double.infinity,
@@ -502,6 +695,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                               coinReward: coinReward,
                               levelIndex: selectedLevel,
                               deadline: finalDeadline,
+                              hasAlarm: hasAlarm,
+                              hasReminder: hasReminder,
+                              ringtoneType: ringtoneType,
+                              ringtoneName: ringtoneName,
+                              ringtonePath: ringtonePath,
+                              ringtoneBase64: ringtoneBase64,
                             );
                             
                             taskController.addTask(newTask);
@@ -517,7 +716,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               );
             },
           ),
-        );
+        ));
       },
     );
   }
@@ -532,11 +731,22 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     TextEditingController editDescController = TextEditingController(text: desc);
     
     bool titleError = false;
+    bool hasAlarm = task.hasAlarm;
+    bool hasReminder = task.hasReminder;
+    String ringtoneType = task.ringtoneType;
+    String ringtoneName = task.ringtoneName;
+    String? ringtonePath = task.ringtonePath;
+    String? ringtoneBase64 = task.ringtoneBase64;
+    bool isPreviewPlaying = false;
     showDialog(
       context: context,
       builder: (context) {
         final isDark = Theme.of(context).brightness == Brightness.dark;
-        return Dialog(
+        return PopScope(
+          onPopInvokedWithResult: (didPop, result) {
+            taskController.stopAlarmSound();
+          },
+          child: Dialog(
           alignment: Alignment.topCenter,
           insetPadding: const EdgeInsets.only(top: 60, left: 16, right: 16, bottom: 16),
           backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -671,12 +881,157 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                 setModalState(() {
                                   selectedDeadline = null;
                                   timeOption = "none";
+                                  hasAlarm = false;
+                                  hasReminder = false;
                                 });
                               },
                             )
                           ]
                         ],
                       ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _buildToggleOption(
+                              context: context,
+                              icon: Icons.alarm,
+                              label: 'alarm'.tr,
+                              isActive: hasAlarm,
+                              isEnabled: selectedDeadline != null,
+                              onTap: () {
+                                setModalState(() {
+                                  hasAlarm = !hasAlarm;
+                                });
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _buildToggleOption(
+                              context: context,
+                              icon: Icons.notifications_none,
+                              label: 'reminder'.tr,
+                              isActive: hasReminder,
+                              isEnabled: selectedDeadline != null,
+                              onTap: () {
+                                setModalState(() {
+                                  hasReminder = !hasReminder;
+                                });
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (hasAlarm) ...[
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: isDark ? Colors.white.withOpacity(0.04) : Colors.black.withOpacity(0.03),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: isDark ? Colors.white10 : Colors.black.withOpacity(0.05)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                Get.locale?.languageCode == 'zh' ? '闹钟铃声设置' : 'Alarm Ringtone Settings',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                  color: isDark ? Colors.white70 : Colors.black87,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: DropdownButtonHideUnderline(
+                                      child: DropdownButton<String>(
+                                        value: ringtoneType == 'custom' ? 'custom' : ringtonePath,
+                                        dropdownColor: Theme.of(context).scaffoldBackgroundColor,
+                                        isExpanded: true,
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          color: isDark ? Colors.white : Colors.black87,
+                                          fontFamily: 'Inter',
+                                        ),
+                                        items: [
+                                          const DropdownMenuItem(
+                                            value: 'audio/jackpot.wav',
+                                            child: Text('🏆 宝藏金币 (默认)'),
+                                          ),
+                                          const DropdownMenuItem(
+                                            value: 'audio/coin.wav',
+                                            child: Text('✨ 闪耀金币'),
+                                          ),
+                                          DropdownMenuItem(
+                                            value: 'custom',
+                                            child: Text(ringtoneType == 'custom' ? '🎵 $ringtoneName' : '➕ 自定义本地音频...'),
+                                          ),
+                                        ],
+                                        onChanged: (val) async {
+                                          if (val == 'custom') {
+                                            await _pickCustomAudio(setModalState, (name, path, base64) {
+                                              setModalState(() {
+                                                ringtoneType = 'custom';
+                                                ringtoneName = name;
+                                                ringtonePath = path;
+                                                ringtoneBase64 = base64;
+                                                if (isPreviewPlaying) {
+                                                  isPreviewPlaying = false;
+                                                  taskController.stopAlarmSound();
+                                                }
+                                              });
+                                            });
+                                          } else if (val != null) {
+                                            setModalState(() {
+                                              ringtoneType = 'preset';
+                                              ringtoneName = val == 'audio/jackpot.wav' ? '宝藏金币 (默认)' : '闪耀金币';
+                                              ringtonePath = val;
+                                              ringtoneBase64 = null;
+                                              if (isPreviewPlaying) {
+                                                isPreviewPlaying = false;
+                                                taskController.stopAlarmSound();
+                                              }
+                                            });
+                                          }
+                                        },
+                                      ),
+                                    ),
+                                  ),
+                                  IconButton(
+                                    icon: Icon(
+                                      isPreviewPlaying ? Icons.stop_circle : Icons.play_circle_fill,
+                                      color: Theme.of(context).primaryColor,
+                                      size: 28,
+                                    ),
+                                    onPressed: () async {
+                                      setModalState(() {
+                                        isPreviewPlaying = !isPreviewPlaying;
+                                      });
+                                      if (isPreviewPlaying) {
+                                        final tempTask = TaskModel(
+                                          title: 'Preview',
+                                          coinReward: 0,
+                                          ringtoneType: ringtoneType,
+                                          ringtoneName: ringtoneName,
+                                          ringtonePath: ringtonePath,
+                                          ringtoneBase64: ringtoneBase64,
+                                        );
+                                        await taskController.playAlarmSound(tempTask);
+                                      } else {
+                                        await taskController.stopAlarmSound();
+                                      }
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 20),
                       Container(
                         width: double.infinity,
@@ -717,15 +1072,18 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                               defaultCoins = TaskModel.getMaxCoinsForLevel(selectedLevel);
                             }
                             
-                            final reallyUpdatedTask = TaskModel(
-                              id: task.id,
+                            final reallyUpdatedTask = task.copyWith(
                               title: onlyTime ? task.title : editTitleController.text.trim(),
                               description: onlyTime ? task.description : (editDescController.text.trim().isEmpty ? null : editDescController.text.trim()),
-                              isCompleted: task.isCompleted,
                               coinReward: defaultCoins,
                               levelIndex: selectedLevel,
-                              createdAt: task.createdAt,
                               deadline: timeOption == "none" ? null : selectedDeadline,
+                              hasAlarm: hasAlarm,
+                              hasReminder: hasReminder,
+                              ringtoneType: ringtoneType,
+                              ringtoneName: ringtoneName,
+                              ringtonePath: ringtonePath,
+                              ringtoneBase64: ringtoneBase64,
                             );
                             taskController.updateTask(task.id, reallyUpdatedTask);
                             Navigator.pop(context);
@@ -740,10 +1098,70 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               );
             },
           ),
-        );
+        ));
       },
     );
   }
+  Widget _buildToggleOption({
+    required BuildContext context,
+    required IconData icon,
+    required String label,
+    required bool isActive,
+    required bool isEnabled,
+    required VoidCallback onTap,
+  }) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    
+    Color activeColor = theme.primaryColor;
+    Color inactiveColor = isDark ? Colors.white70 : Colors.black54;
+    Color disabledColor = isDark ? Colors.white24 : Colors.black26;
+
+    Color currentBg = isActive && isEnabled
+        ? activeColor.withOpacity(0.12)
+        : Colors.transparent;
+
+    Color currentBorderColor = !isEnabled
+        ? (isDark ? Colors.white10 : Colors.black.withOpacity(0.06))
+        : (isActive ? activeColor : (isDark ? Colors.white24 : Colors.black12));
+
+    Color currentTextColor = !isEnabled
+        ? disabledColor
+        : (isActive ? activeColor : inactiveColor);
+
+    return Opacity(
+      opacity: isEnabled ? 1.0 : 0.5,
+      child: InkWell(
+        onTap: isEnabled ? onTap : null,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          decoration: BoxDecoration(
+            color: currentBg,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: currentBorderColor, width: isActive && isEnabled ? 1.5 : 1.0),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, color: currentTextColor, size: 18),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  color: currentTextColor,
+                  fontSize: 13,
+                  fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+                  fontFamily: 'Inter',
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildLiquidGlassBackground() {
     return Container(
       color: Theme.of(context).scaffoldBackgroundColor,
@@ -753,12 +1171,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     switch (_currentIndex) {
       case 0:
-        return DefaultTabController(
-          length: 3,
-          child: Stack(
-            children: [
-              TabBarView(
-                children: [
+        return Stack(
+          children: [
+            TabBarView(
+              controller: _tabController,
+              children: [
                   _buildTaskList(filter: 'in_progress', topPadding: 50.0),
                   _buildTaskList(filter: 'overdue', topPadding: 50.0),
                   _buildTaskList(filter: 'completed', topPadding: 50.0),
@@ -790,6 +1207,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                         ],
                       ),
                       child: TabBar(
+                        controller: _tabController,
                         tabs: [
                           Tab(text: 'tab_in_progress'.tr),
                           Tab(text: 'tab_overdue'.tr),
@@ -805,7 +1223,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 ),
               ),
             ],
-          ),
         );
       case 1:
         return CheckInScreen(
@@ -1387,7 +1804,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   margin: const EdgeInsets.only(bottom: 8, left: 6),
                   decoration: BoxDecoration(
                     color: Colors.red.shade600,
-                    borderRadius: BorderRadius.circular(20),
+                    borderRadius: BorderRadius.circular(16),
                   ),
                   child: const Center(
                     child: Icon(Icons.delete, color: Colors.white, size: 48),

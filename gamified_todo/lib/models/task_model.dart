@@ -14,6 +14,12 @@ class TaskModel {
   DateTime? deadline;
   DateTime? completedAt;
 
+  // Alarm Ringtone Configurations
+  String ringtoneType; // "preset" or "custom"
+  String ringtoneName; // Display name e.g., "宝藏金币 (默认)"
+  String? ringtonePath; // Asset path (for preset) or file path (for custom)
+  String? ringtoneBase64; // Base64 encoded string for Web custom audio persistence
+
   TaskModel({
     String? id,
     required this.title,
@@ -26,6 +32,10 @@ class TaskModel {
     DateTime? createdAt,
     this.deadline,
     this.completedAt,
+    this.ringtoneType = 'preset',
+    this.ringtoneName = '宝藏金币 (默认)',
+    this.ringtonePath = 'audio/jackpot.wav',
+    this.ringtoneBase64,
   })  : id = id ?? const Uuid().v4(),
         createdAt = createdAt ?? DateTime.now();
 
@@ -105,6 +115,10 @@ class TaskModel {
     int? levelIndex,
     DateTime? deadline,
     DateTime? completedAt,
+    String? ringtoneType,
+    String? ringtoneName,
+    String? ringtonePath,
+    String? ringtoneBase64,
   }) {
     return TaskModel(
       id: id,
@@ -118,6 +132,10 @@ class TaskModel {
       createdAt: createdAt,
       deadline: deadline ?? this.deadline,
       completedAt: completedAt ?? this.completedAt,
+      ringtoneType: ringtoneType ?? this.ringtoneType,
+      ringtoneName: ringtoneName ?? this.ringtoneName,
+      ringtonePath: ringtonePath ?? this.ringtonePath,
+      ringtoneBase64: ringtoneBase64 ?? this.ringtoneBase64,
     );
   }
 }
