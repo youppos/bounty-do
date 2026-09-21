@@ -69,8 +69,9 @@ jobs:
           git checkout -B ci-logs
           git reset --hard
           if [ -f gamified_todo/build_output.log ]; then
-            tail -n 200 gamified_todo/build_output.log > latest_error.log
-            git add -f latest_error.log
+            cp gamified_todo/build_output.log full_build_output.log
+            grep -E -B 20 -A 5 "compileFlutterBuildRelease|FAILURE|Exception|Error:" gamified_todo/build_output.log > latest_error.log || true
+            git add -f full_build_output.log latest_error.log
             git commit -m "chore: record build error for run ${{ github.run_number }}"
             git push origin ci-logs --force || true
           fi
