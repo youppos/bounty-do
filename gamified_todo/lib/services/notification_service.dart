@@ -1,18 +1,74 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
+import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:get/get.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/task_model.dart';
 import '../models/check_in_model.dart';
 import '../controllers/task_controller.dart';
 import '../ui/widgets/alarm_trigger_dialog.dart';
 
 @pragma('vm:entry-point')
-void notificationTapBackground(NotificationResponse notificationResponse) {
-  // Background action handler
-  handleNotificationAction(notificationResponse);
+void notificationTapBackground(NotificationResponse notificationResponse) async {
+  // Background action handler (runs in a separate isolate when app is killed)
+  WidgetsFlutterBinding.ensureInitialized();
+  final payload = notificationResponse.payload;
+  if (payload == null || payload.isEmpty) return;
+
+  try {
+    final Map<String, dynamic> data = jsonDecode(payload);
+    final String type = data['type'] ?? '';
+    final String id = data['id'] ?? '';
+    final String? actionId = notificationResponse.actionId;
+
+    if (actionId == 'complete' || actionId == 'snooze') {
+      final prefs = await SharedPreferences.getInstance();
+      
+      if (type == 'alarm' || type == 'reminder') {
+        final String? tasksJson = prefs.getString('saved_tasks');
+        if (tasksJson != null) {
+          final List<dynamic> decoded = jsonDecode(tasksJson);
+          final tasks = decoded.map((item) => TaskModel.fromMap(item as Map<String, dynamic>)).toList();
+          final index = tasks.indexWhere((t) => t.id == id);
+          if (index != -1) {
+            if (actionId == 'complete') {
+              tasks[index].isCompleted = true;
+              tasks[index].completedAt = DateTime.now();
+            } else if (actionId == 'snooze') {
+              if (tasks[index].deadline != null) {
+                tasks[index].deadline = tasks[index].deadline!.add(const Duration(minutes: 10));
+              }
+            }
+            final listMap = tasks.map((t) => t.toMap()).toList();
+            await prefs.setString('saved_tasks', jsonEncode(listMap));
+          }
+        }
+      } else if (type == 'checkin') {
+        if (actionId == 'complete') {
+          final String? checkInsJson = prefs.getString('saved_check_ins');
+          if (checkInsJson != null) {
+            final List<dynamic> decoded = jsonDecode(checkInsJson);
+            final checkIns = decoded.map((item) => CheckInModel.fromMap(item as Map<String, dynamic>)).toList();
+            final index = checkIns.indexWhere((c) => c.id == id);
+            if (index != -1) {
+              final todayStr = DateTime.now().toString().split(' ')[0];
+              if (!checkIns[index].history.contains(todayStr)) {
+                checkIns[index].history.add(todayStr);
+              }
+              final listMap = checkIns.map((c) => c.toMap()).toList();
+              await prefs.setString('saved_check_ins', jsonEncode(listMap));
+            }
+          }
+        }
+      }
+    }
+  } catch (e) {
+    // Ignore errors in background isolate
+  }
 }
 
 void handleNotificationAction(NotificationResponse response) {
@@ -71,8 +127,14 @@ class NotificationService {
   Future<void> init() async {
     if (_isInitialized || TaskController.isTesting) return;
 
-    // 1. Initialize timezone
+    // 1. Initialize timezone (fetch real local timezone from device)
     tz.initializeTimeZones();
+    try {
+      final timeZoneInfo = await FlutterTimezone.getLocalTimezone();
+      tz.setLocalLocation(tz.getLocation(timeZoneInfo.identifier));
+    } catch (e) {
+      // Fallback
+    }
 
     // 2. Initialize android notification settings
     const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
@@ -99,7 +161,6 @@ class NotificationService {
     final android = _plugin.resolvePlatformSpecificImplementation<
         AndroidFlutterLocalNotificationsPlugin>();
     if (android != null) {
-      // Channel 1: Normal Reminder
       const reminderChannel = AndroidNotificationChannel(
         channelRemindersId,
         '待办与打卡提醒',
@@ -109,7 +170,6 @@ class NotificationService {
         enableVibration: true,
       );
 
-      // Channel 2: Strong Alarm
       final alarmChannel = AndroidNotificationChannel(
         channelAlarmsId,
         '任务截止强闹钟',
@@ -153,7 +213,6 @@ class NotificationService {
     return (id.hashCode + offset) & 0x7FFFFFFF;
   }
 
-  // 调度任务闹钟或提醒
   Future<void> scheduleTaskAlarmOrReminder(TaskModel task) async {
     if (TaskController.isTesting) return;
     if (!_isInitialized) await init();
@@ -161,7 +220,6 @@ class NotificationService {
     final reminderId = _getNotificationId(task.id, offset: 0);
     final alarmId = _getNotificationId(task.id, offset: 1);
 
-    // 先取消旧的通知
     await _plugin.cancel(id: reminderId);
     await _plugin.cancel(id: alarmId);
 
@@ -172,113 +230,99 @@ class NotificationService {
 
     final scheduledDate = tz.TZDateTime.from(task.deadline!, tz.local);
 
-    // 1. 如果开启了强闹钟
-    if (task.hasAlarm) {
-      final payload = jsonEncode({
-        'type': 'alarm',
-        'id': task.id,
-        'title': task.title,
-      });
+    try {
+      if (task.hasAlarm) {
+        final payload = jsonEncode({
+          'type': 'alarm',
+          'id': task.id,
+          'title': task.title,
+        });
 
-      final androidDetails = AndroidNotificationDetails(
-        channelAlarmsId,
-        '任务截止强闹钟',
-        channelDescription: '任务截止时间高优先级强提醒闹钟',
-        importance: Importance.max,
-        priority: Priority.max,
-        playSound: true,
-        sound: const RawResourceAndroidNotificationSound('jackpot'),
-        audioAttributesUsage: AudioAttributesUsage.alarm,
-        fullScreenIntent: true,
-        enableVibration: true,
-        vibrationPattern: Int64List.fromList([0, 1000, 500, 1000, 500, 1000, 500, 1000]),
-        additionalFlags: Int32List.fromList([4]), // FLAG_INSISTENT: 持续发声
-        category: AndroidNotificationCategory.alarm,
-        actions: <AndroidNotificationAction>[
-          const AndroidNotificationAction(
-            'snooze',
-            '稍后 10 分钟',
-            showsUserInterface: false,
+        final androidDetails = AndroidNotificationDetails(
+          channelAlarmsId,
+          '任务截止强闹钟',
+          channelDescription: '任务截止时间高优先级强提醒闹钟',
+          importance: Importance.max,
+          priority: Priority.max,
+          playSound: true,
+          sound: const RawResourceAndroidNotificationSound('jackpot'),
+          audioAttributesUsage: AudioAttributesUsage.alarm,
+          fullScreenIntent: true,
+          enableVibration: true,
+          vibrationPattern: Int64List.fromList([0, 1000, 500, 1000, 500, 1000, 500, 1000]),
+          additionalFlags: Int32List.fromList([4]), // FLAG_INSISTENT: 持续发声
+          category: AndroidNotificationCategory.alarm,
+          actions: <AndroidNotificationAction>[
+            const AndroidNotificationAction('snooze', '稍后 10 分钟', showsUserInterface: false),
+            const AndroidNotificationAction('complete', '立即完成', showsUserInterface: false),
+          ],
+        );
+
+        final notifDetails = NotificationDetails(
+          android: androidDetails,
+          iOS: const DarwinNotificationDetails(
+            sound: 'jackpot.wav',
+            presentAlert: true,
+            presentSound: true,
+            interruptionLevel: InterruptionLevel.timeSensitive,
           ),
-          const AndroidNotificationAction(
-            'complete',
-            '立即完成',
-            showsUserInterface: false,
-          ),
-        ],
-      );
+        );
 
-      final notifDetails = NotificationDetails(
-        android: androidDetails,
-        iOS: const DarwinNotificationDetails(
-          sound: 'jackpot.wav',
-          presentAlert: true,
-          presentSound: true,
-          interruptionLevel: InterruptionLevel.timeSensitive,
-        ),
-      );
+        await _plugin.zonedSchedule(
+          id: alarmId,
+          title: '⏰ 任务截止闹钟：${task.title}',
+          body: task.description?.isNotEmpty == true
+              ? task.description!
+              : '截止时间已到，完成任务可获取 ${task.coinReward} 金币奖励！',
+          scheduledDate: scheduledDate,
+          notificationDetails: notifDetails,
+          androidScheduleMode: AndroidScheduleMode.alarmClock, // 强制离线触发
+          payload: payload,
+        );
+      } else if (task.hasReminder) {
+        final payload = jsonEncode({
+          'type': 'reminder',
+          'id': task.id,
+          'title': task.title,
+        });
 
-      await _plugin.zonedSchedule(
-        id: alarmId,
-        title: '⏰ 任务截止闹钟：${task.title}',
-        body: task.description?.isNotEmpty == true
-            ? task.description!
-            : '截止时间已到，完成任务可获取 ${task.coinReward} 金币奖励！',
-        scheduledDate: scheduledDate,
-        notificationDetails: notifDetails,
-        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-        payload: payload,
-      );
-    } 
-    // 2. 如果仅开启了普通提醒
-    else if (task.hasReminder) {
-      final payload = jsonEncode({
-        'type': 'reminder',
-        'id': task.id,
-        'title': task.title,
-      });
+        const androidDetails = AndroidNotificationDetails(
+          channelRemindersId,
+          '待办与打卡提醒',
+          channelDescription: '任务到期与每日习惯打卡通知',
+          importance: Importance.high,
+          priority: Priority.high,
+          playSound: true,
+          enableVibration: true,
+          category: AndroidNotificationCategory.reminder,
+          actions: <AndroidNotificationAction>[
+            AndroidNotificationAction('complete', '标记完成', showsUserInterface: false),
+          ],
+        );
 
-      const androidDetails = AndroidNotificationDetails(
-        channelRemindersId,
-        '待办与打卡提醒',
-        channelDescription: '任务到期与每日习惯打卡通知',
-        importance: Importance.high,
-        priority: Priority.high,
-        playSound: true,
-        enableVibration: true,
-        category: AndroidNotificationCategory.reminder,
-        actions: <AndroidNotificationAction>[
-          AndroidNotificationAction(
-            'complete',
-            '标记完成',
-            showsUserInterface: false,
-          ),
-        ],
-      );
+        const notifDetails = NotificationDetails(
+          android: androidDetails,
+          iOS: DarwinNotificationDetails(presentAlert: true, presentSound: true),
+        );
 
-      const notifDetails = NotificationDetails(
-        android: androidDetails,
-        iOS: DarwinNotificationDetails(
-          presentAlert: true,
-          presentSound: true,
-        ),
-      );
-
-      await _plugin.zonedSchedule(
-        id: reminderId,
-        title: '📌 待办提醒：${task.title}',
-        body: task.description?.isNotEmpty == true
-            ? task.description!
-            : '已到达计划完成时间，及时完成保持自律！',
-        scheduledDate: scheduledDate,
-        notificationDetails: notifDetails,
-        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-        payload: payload,
-      );
+        await _plugin.zonedSchedule(
+          id: reminderId,
+          title: '📌 待办提醒：${task.title}',
+          body: task.description?.isNotEmpty == true
+              ? task.description!
+              : '已到达计划完成时间，及时完成保持自律！',
+          scheduledDate: scheduledDate,
+          notificationDetails: notifDetails,
+          androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+          payload: payload,
+        );
+      }
+    } catch (e) {
+      // 忽略因 Android 14+ 缺少精确闹钟权限导致的异常，防止重构崩溃
+      debugPrint("Schedule task notification failed: $e");
     }
   }
 
-  // 取消任务通知
   Future<void> cancelTaskNotification(String taskId) async {
     if (TaskController.isTesting) return;
     if (!_isInitialized) await init();
@@ -286,7 +330,6 @@ class NotificationService {
     await _plugin.cancel(id: _getNotificationId(taskId, offset: 1));
   }
 
-  // 调度打卡日常提醒
   Future<void> scheduleCheckInReminder(CheckInModel checkIn) async {
     if (TaskController.isTesting) return;
     if (!_isInitialized) await init();
@@ -326,42 +369,37 @@ class NotificationService {
       enableVibration: true,
       category: AndroidNotificationCategory.reminder,
       actions: <AndroidNotificationAction>[
-        AndroidNotificationAction(
-          'complete',
-          '立即打卡',
-          showsUserInterface: false,
-        ),
+        AndroidNotificationAction('complete', '立即打卡', showsUserInterface: false),
       ],
     );
 
     const notifDetails = NotificationDetails(
       android: androidDetails,
-      iOS: DarwinNotificationDetails(
-        presentAlert: true,
-        presentSound: true,
-      ),
+      iOS: DarwinNotificationDetails(presentAlert: true, presentSound: true),
     );
 
-    await _plugin.zonedSchedule(
-      id: checkInId,
-      title: '🎯 习惯打卡提醒：${checkIn.title}',
-      body: '到点打卡啦！坚持打卡可获得金币奖励哦！',
-      scheduledDate: scheduledDate,
-      notificationDetails: notifDetails,
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-      matchDateTimeComponents: DateTimeComponents.time, // 每日重复
-      payload: payload,
-    );
+    try {
+      await _plugin.zonedSchedule(
+        id: checkInId,
+        title: '🎯 习惯打卡提醒：${checkIn.title}',
+        body: '到点打卡啦！坚持打卡可获得金币奖励哦！',
+        scheduledDate: scheduledDate,
+        notificationDetails: notifDetails,
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        matchDateTimeComponents: DateTimeComponents.time,
+        payload: payload,
+      );
+    } catch (e) {
+      debugPrint("Schedule checkin notification failed: $e");
+    }
   }
 
-  // 取消打卡通知
   Future<void> cancelCheckInNotification(String checkInId) async {
     if (TaskController.isTesting) return;
     if (!_isInitialized) await init();
     await _plugin.cancel(id: _getNotificationId(checkInId, offset: 2));
   }
 
-  // 全量重新同步所有未完成任务和打卡提醒
   Future<void> rescheduleAll({
     required List<TaskModel> tasks,
     required List<CheckInModel> checkIns,
