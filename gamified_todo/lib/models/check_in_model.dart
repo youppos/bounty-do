@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:uuid/uuid.dart';
 
 class CheckInModel {
@@ -82,5 +83,49 @@ class CheckInModel {
       monthlyDays: monthlyDays ?? (monthlyDays != null ? List.from(monthlyDays) : this.monthlyDays),
     );
   }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'title': title,
+      'levelIndex': levelIndex,
+      'reminderTime': reminderTime,
+      'history': history,
+      'frequencyType': frequencyType,
+      'weeklyDays': weeklyDays,
+      'intervalDays': intervalDays,
+      'startDate': startDate,
+      'monthlyDays': monthlyDays,
+    };
+  }
+
+  factory CheckInModel.fromMap(Map<String, dynamic> map) {
+    return CheckInModel(
+      id: map['id'] as String?,
+      title: map['title'] as String? ?? '',
+      levelIndex: map['levelIndex'] as int? ?? 0,
+      reminderTime: map['reminderTime'] as String?,
+      history: (map['history'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          [],
+      frequencyType: map['frequencyType'] as String? ?? 'daily',
+      weeklyDays: (map['weeklyDays'] as List<dynamic>?)
+              ?.map((e) => (e as num).toInt())
+              .toList() ??
+          [1, 2, 3, 4, 5, 6, 7],
+      intervalDays: map['intervalDays'] as int? ?? 2,
+      startDate: map['startDate'] as String?,
+      monthlyDays: (map['monthlyDays'] as List<dynamic>?)
+              ?.map((e) => (e as num).toInt())
+              .toList() ??
+          [1],
+    );
+  }
+
+  String toJson() => jsonEncode(toMap());
+
+  factory CheckInModel.fromJson(String source) =>
+      CheckInModel.fromMap(jsonDecode(source) as Map<String, dynamic>);
 }
 

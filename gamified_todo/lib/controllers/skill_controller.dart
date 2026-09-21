@@ -20,6 +20,8 @@ class SkillController extends GetxController {
   static const int costJackpotWheel = 10;
   static const int costSkinUnlock = 160;
 
+  late final Future<void> initialization;
+
   // Check if Shield of Discipline is currently active
   bool get isShieldActive {
     if (shieldExpiry.value == null) return false;
@@ -29,7 +31,7 @@ class SkillController extends GetxController {
   @override
   void onInit() {
     super.onInit();
-    _loadState();
+    initialization = _loadState();
   }
 
   Future<void> _loadState() async {
@@ -111,6 +113,7 @@ class SkillController extends GetxController {
           );
         }
       }
+      taskController.saveTasks();
       return true;
     }
     return false;

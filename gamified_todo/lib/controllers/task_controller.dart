@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:get/get.dart';
 import 'package:audioplayers/audioplayers.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/task_model.dart';
 import '../models/check_in_model.dart';
 import 'skill_controller.dart';
@@ -70,14 +71,13 @@ class TaskController extends GetxController {
     return getTasksCreatedTodayCount() < dailyTaskLimit;
   }
 
+  final _prefs = SharedPreferences.getInstance();
+  late final Future<void> initialization;
+
   @override
   void onInit() {
     super.onInit();
-    if (isTesting) {
-      totalCoins.value = 0;
-    } else {
-      totalCoins.value = 3000; // Start with 3000 coins for testing
-    }
+    initialization = _loadPersistedData();
     if (!isTesting) {
       _initAudio();
       _startAlarmCheckTimer();
@@ -93,9 +93,114 @@ class TaskController extends GetxController {
       }
     });
 
-    // 模拟从数据库加载数据
-    loadMockTasks();
-    loadMockCheckIns();
+    // 响应式自动保存金币与时间展示模式
+    ever(totalCoins, (_) => _saveCoins());
+    ever(showAsCountdown, (_) => _saveCountdownMode());
+  }
+
+  Future<void> _loadPersistedData() async {
+    final prefs = await _prefs;
+
+    // 1. 加载金币总数
+    if (prefs.containsKey('total_coins')) {
+      totalCoins.value = prefs.getInt('total_coins') ?? 0;
+    } else {
+      totalCoins.value = isTesting ? 0 : 3000;
+      await prefs.setInt('total_coins', totalCoins.value);
+    }
+
+    // 2. 加载全局时间展示模式
+    if (prefs.containsKey('show_as_countdown')) {
+      showAsCountdown.value = prefs.getBool('show_as_countdown') ?? true;
+    }
+
+    // 3. 加载任务列表
+    final String? tasksJson = prefs.getString('saved_tasks');
+    if (tasksJson != null) {
+      try {
+        final List<dynamic> decoded = jsonDecode(tasksJson);
+        final loadedTasks = decoded
+            .map((item) => TaskModel.fromMap(item as Map<String, dynamic>))
+            .toList();
+        tasks.assignAll(loadedTasks);
+      } catch (e) {
+        print('Error loading tasks from preferences: $e');
+        loadMockTasks();
+        await _saveTasks();
+      }
+    } else {
+      loadMockTasks();
+      await _saveTasks();
+    }
+
+    // 4. 加载打卡项目列表
+    final String? checkInsJson = prefs.getString('saved_check_ins');
+    if (checkInsJson != null) {
+      try {
+        final List<dynamic> decoded = jsonDecode(checkInsJson);
+        final loadedCheckIns = decoded
+            .map((item) => CheckInModel.fromMap(item as Map<String, dynamic>))
+            .toList();
+        checkIns.assignAll(loadedCheckIns);
+      } catch (e) {
+        print('Error loading checkIns from preferences: $e');
+        loadMockCheckIns();
+        await _saveCheckIns();
+      }
+    } else {
+      loadMockCheckIns();
+      await _saveCheckIns();
+    }
+  }
+
+  Future<void> _saveTasks() async {
+    try {
+      final prefs = await _prefs;
+      final listMap = tasks.map((t) => t.toMap()).toList();
+      await prefs.setString('saved_tasks', jsonEncode(listMap));
+    } catch (e) {
+      print('Error saving tasks: $e');
+    }
+  }
+
+  void saveTasks() {
+    _saveTasks();
+  }
+
+  Future<void> _saveCheckIns() async {
+    try {
+      final prefs = await _prefs;
+      final listMap = checkIns.map((c) => c.toMap()).toList();
+      await prefs.setString('saved_check_ins', jsonEncode(listMap));
+    } catch (e) {
+      print('Error saving checkIns: $e');
+    }
+  }
+
+  void saveCheckIns() {
+    _saveCheckIns();
+  }
+
+  Future<void> _saveCoins() async {
+    try {
+      final prefs = await _prefs;
+      await prefs.setInt('total_coins', totalCoins.value);
+    } catch (e) {
+      print('Error saving coins: $e');
+    }
+  }
+
+  void saveCoins() {
+    _saveCoins();
+  }
+
+  Future<void> _saveCountdownMode() async {
+    try {
+      final prefs = await _prefs;
+      await prefs.setBool('show_as_countdown', showAsCountdown.value);
+    } catch (e) {
+      print('Error saving countdown mode: $e');
+    }
   }
 
   @override
@@ -131,11 +236,13 @@ class TaskController extends GetxController {
   // 切换全局时间展示模式
   void toggleTimeDisplayMode() {
     showAsCountdown.value = !showAsCountdown.value;
+    _saveCountdownMode();
   }
 
   // 添加任务
   void addTask(TaskModel task) {
     tasks.add(task);
+    _saveTasks();
   }
 
   // 更新任务
@@ -143,6 +250,7 @@ class TaskController extends GetxController {
     var index = tasks.indexWhere((task) => task.id == id);
     if (index != -1) {
       tasks[index] = updatedTask;
+      _saveTasks();
     }
   }
 
@@ -186,16 +294,19 @@ class TaskController extends GetxController {
         coinReward: finalReward, // Freeze the reward in the model
       );
       tasks[index] = updatedTask;
+      _saveTasks();
       
       // 更新金币
       if (isCompleted) {
         // 延迟900毫秒更新金币（等待飞行金币动画到达目标点再开始数字滚动）
         Future.delayed(const Duration(milliseconds: 900), () {
           totalCoins.value += finalReward;
+          _saveCoins();
         });
       } else {
         totalCoins.value -= task.coinReward;
         if (totalCoins.value < 0) totalCoins.value = 0;
+        _saveCoins();
       }
     }
   }
@@ -205,6 +316,7 @@ class TaskController extends GetxController {
     var index = tasks.indexWhere((task) => task.id == id);
     if (index != -1) {
       tasks[index] = tasks[index].copyWith(hasAlarm: !tasks[index].hasAlarm);
+      _saveTasks();
     }
   }
 
@@ -213,6 +325,7 @@ class TaskController extends GetxController {
     var index = tasks.indexWhere((task) => task.id == id);
     if (index != -1) {
       tasks[index] = tasks[index].copyWith(hasReminder: !tasks[index].hasReminder);
+      _saveTasks();
     }
   }
 
@@ -250,11 +363,13 @@ class TaskController extends GetxController {
   // 删除任务
   void deleteTask(String id) {
     tasks.removeWhere((task) => task.id == id);
+    _saveTasks();
   }
 
   // 添加打卡项目
   void addCheckIn(CheckInModel item) {
     checkIns.add(item);
+    _saveCheckIns();
   }
 
   // 更新打卡项目
@@ -262,12 +377,14 @@ class TaskController extends GetxController {
     var index = checkIns.indexWhere((item) => item.id == id);
     if (index != -1) {
       checkIns[index] = updatedItem;
+      _saveCheckIns();
     }
   }
 
   // 删除打卡项目
   void deleteCheckIn(String id) {
     checkIns.removeWhere((item) => item.id == id);
+    _saveCheckIns();
   }
 
   // 切换打卡完成状态
@@ -283,16 +400,19 @@ class TaskController extends GetxController {
         history.add(dateStr);
       }
       checkIns[index] = item.copyWith(history: history);
+      _saveCheckIns();
 
       if (!isCompleted) {
         final reward = item.levelIndex == 0 ? 1 : 3;
         Future.delayed(const Duration(milliseconds: 900), () {
           totalCoins.value += reward;
+          _saveCoins();
         });
       } else {
         final reward = item.levelIndex == 0 ? 1 : 3;
         totalCoins.value -= reward;
         if (totalCoins.value < 0) totalCoins.value = 0;
+        _saveCoins();
       }
     }
   }
@@ -392,6 +512,7 @@ class TaskController extends GetxController {
       );
       // 移出已触发列表，使其到期时能再次触发
       _triggeredAlarmTaskIds.remove(id);
+      _saveTasks();
       Get.back(); // 关闭闹钟弹窗
       SnackbarUtils.showInfo(
         title: '闹钟已延迟',

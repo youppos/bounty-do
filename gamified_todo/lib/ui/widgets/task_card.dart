@@ -42,15 +42,31 @@ class _TaskCardState extends State<TaskCard> with SingleTickerProviderStateMixin
   final SettingsController settingsController = Get.find();
   final SkillController skillController = Get.find<SkillController>();
   late AnimationController _effectController;
+  StreamSubscription? _effectSubscription;
 
   @override
   void initState() {
     super.initState();
     _startTimerIfNeeded();
-    _effectController = AnimationController(vsync: this, duration: const Duration(seconds: 3));
-    if (settingsController.taskLightEffect.value != 0) {
+    
+    final initialEffect = settingsController.taskLightEffect.value;
+    final initialDuration = (initialEffect == 2) ? const Duration(seconds: 15) : const Duration(seconds: 5);
+    _effectController = AnimationController(vsync: this, duration: initialDuration);
+    if (initialEffect != 0) {
       _effectController.repeat();
     }
+
+    _effectSubscription = settingsController.taskLightEffect.listen((effect) {
+      if (mounted) {
+        final targetDuration = (effect == 2) ? const Duration(seconds: 15) : const Duration(seconds: 5);
+        _effectController.duration = targetDuration;
+        if (effect == 0) {
+          _effectController.stop();
+        } else {
+          _effectController.repeat();
+        }
+      }
+    });
   }
 
   @override
@@ -74,6 +90,7 @@ class _TaskCardState extends State<TaskCard> with SingleTickerProviderStateMixin
 
   @override
   void dispose() {
+    _effectSubscription?.cancel();
     _effectController.dispose();
     _timer?.cancel();
     super.dispose();
@@ -211,11 +228,6 @@ class _TaskCardState extends State<TaskCard> with SingleTickerProviderStateMixin
 
     return Obx(() {
       final effect = settingsController.taskLightEffect.value;
-      if (effect == 0) {
-        if (_effectController.isAnimating) _effectController.stop();
-      } else {
-        if (!_effectController.isAnimating) _effectController.repeat();
-      }
 
       // Check overdue and calculate rewards
       final now = DateTime.now();
@@ -509,7 +521,7 @@ class _TaskCardState extends State<TaskCard> with SingleTickerProviderStateMixin
         builder: (context, child) {
           double animValue = _effectController.value;
           
-          double baseThickness = 0.0; // Borders are cancelled by user request
+          double baseThickness = 0.0;
           double shadowOpacity = 0.06;
           double blurRadius = 8.0;
           double spreadRadius = 1.0;
@@ -520,18 +532,38 @@ class _TaskCardState extends State<TaskCard> with SingleTickerProviderStateMixin
             double breathVal = (math.sin((animValue + phaseOffset) * 2 * math.pi) + 1) / 2;
             shadowOpacity = 0.04 + 0.12 * breathVal;
             blurRadius = 8.0 + 8.0 * breathVal;
-          } else if (effect == 2) { // Marquee
+          } else if (effect == 2) { // Marquee (flowing light speed border)
+            baseThickness = 1.5;
             borderGradient = SweepGradient(
-              colors: [priorityColor.withOpacity(0.1), priorityColor, priorityColor.withOpacity(0.1)],
-              stops: const [0.0, 0.5, 1.0],
+              colors: [
+                Colors.white,
+                priorityColor,
+                priorityColor.withOpacity(0.3),
+                priorityColor.withOpacity(0.05),
+                Colors.transparent,
+                Colors.transparent,
+              ],
+              stops: const [
+                0.0,
+                0.02,
+                0.08,
+                0.2,
+                0.25,
+                1.0,
+              ],
               transform: GradientRotation(animValue * 2 * math.pi),
             );
           } else if (effect == 3) { // Shimmer
+            baseThickness = 1.5;
             borderGradient = LinearGradient(
-              colors: [priorityColor.withOpacity(0.2), priorityColor, priorityColor.withOpacity(0.2)],
-              stops: [animValue - 0.2, animValue, animValue + 0.2],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
+              colors: [
+                priorityColor.withOpacity(0.1),
+                priorityColor.withOpacity(0.8),
+                priorityColor.withOpacity(0.1),
+              ],
+              stops: const [0.0, 0.5, 1.0],
+              begin: Alignment(-2.0 + (animValue * 4), -2.0 + (animValue * 4)),
+              end: Alignment(0.0 + (animValue * 4), 0.0 + (animValue * 4)),
             );
           } else if (effect == 4) { // Pulse
             double pulse = (math.sin(animValue * 4 * math.pi) + 1) / 2;
@@ -548,9 +580,10 @@ class _TaskCardState extends State<TaskCard> with SingleTickerProviderStateMixin
                 maxWidth: widget.isGrid ? height : double.infinity,
               ),
               margin: EdgeInsets.only(bottom: widget.isGrid ? 4 : 8),
+              clipBehavior: Clip.antiAlias,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(16),
-                gradient: borderGradient,
+                color: Theme.of(context).cardColor.withOpacity(Theme.of(context).brightness == Brightness.dark ? 0.4 : 0.7),
                 boxShadow: [
                   BoxShadow(
                     color: priorityColor.withOpacity(shadowOpacity),
@@ -559,19 +592,17 @@ class _TaskCardState extends State<TaskCard> with SingleTickerProviderStateMixin
                   )
                 ]
               ),
-              child: Padding(
-                padding: EdgeInsets.all(baseThickness),
-                child: Container(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(16),
-                    color: Theme.of(context).cardColor.withOpacity(Theme.of(context).brightness == Brightness.dark ? 0.4 : 0.7),
-                  ),
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: widget.isSelectionMode ? null : widget.onEdit,
-                    onLongPress: widget.isSelectionMode ? null : widget.onLongPress,
-                    child: innerChild,
-                  ),
+              child: CustomPaint(
+                foregroundPainter: GradientBorderPainter(
+                  gradient: borderGradient!,
+                  strokeWidth: baseThickness,
+                  borderRadius: 16.0,
+                ),
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: widget.isSelectionMode ? null : widget.onEdit,
+                  onLongPress: widget.isSelectionMode ? null : widget.onLongPress,
+                  child: innerChild,
                 ),
               ),
             );
@@ -584,6 +615,7 @@ class _TaskCardState extends State<TaskCard> with SingleTickerProviderStateMixin
                 maxWidth: widget.isGrid ? height : double.infinity,
               ),
               margin: EdgeInsets.only(bottom: widget.isGrid ? 4 : 8),
+              clipBehavior: Clip.antiAlias,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(16),
                 color: Theme.of(context).cardColor.withOpacity(Theme.of(context).brightness == Brightness.dark ? 0.4 : 0.7),
@@ -606,5 +638,41 @@ class _TaskCardState extends State<TaskCard> with SingleTickerProviderStateMixin
         },
       );
     });
+  }
+}
+
+class GradientBorderPainter extends CustomPainter {
+  final Gradient gradient;
+  final double strokeWidth;
+  final double borderRadius;
+
+  GradientBorderPainter({
+    required this.gradient,
+    required this.strokeWidth,
+    required this.borderRadius,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Rect.fromLTWH(
+      strokeWidth / 2,
+      strokeWidth / 2,
+      size.width - strokeWidth,
+      size.height - strokeWidth,
+    );
+    final rrect = RRect.fromRectAndRadius(rect, Radius.circular(borderRadius - strokeWidth / 2));
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..shader = gradient.createShader(rect);
+
+    canvas.drawRRect(rrect, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant GradientBorderPainter oldDelegate) {
+    return oldDelegate.gradient != gradient ||
+        oldDelegate.strokeWidth != strokeWidth ||
+        oldDelegate.borderRadius != borderRadius;
   }
 }

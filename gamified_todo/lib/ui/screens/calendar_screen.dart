@@ -1202,6 +1202,8 @@ class _CalendarScreenState extends State<CalendarScreen> with SingleTickerProvid
     TextEditingController editDescController = TextEditingController(text: desc);
     
     bool titleError = false;
+    bool hasAlarm = task.hasAlarm;
+    bool hasReminder = task.hasReminder;
 
     showDialog(
       context: context,
@@ -1326,10 +1328,46 @@ class _CalendarScreenState extends State<CalendarScreen> with SingleTickerProvid
                                 setModalState(() {
                                   selectedDeadline = null;
                                   timeOption = "none";
+                                  hasAlarm = false;
+                                  hasReminder = false;
                                 });
                               },
                             )
                           ]
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _buildToggleOption(
+                              context: context,
+                              icon: Icons.alarm,
+                              label: 'alarm'.tr,
+                              isActive: hasAlarm,
+                              isEnabled: selectedDeadline != null,
+                              onTap: () {
+                                setModalState(() {
+                                  hasAlarm = !hasAlarm;
+                                });
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _buildToggleOption(
+                              context: context,
+                              icon: Icons.notifications_none,
+                              label: 'reminder'.tr,
+                              isActive: hasReminder,
+                              isEnabled: selectedDeadline != null,
+                              onTap: () {
+                                setModalState(() {
+                                  hasReminder = !hasReminder;
+                                });
+                              },
+                            ),
+                          ),
                         ],
                       ),
                       const SizedBox(height: 20),
@@ -1382,6 +1420,8 @@ class _CalendarScreenState extends State<CalendarScreen> with SingleTickerProvid
                               levelIndex: selectedLevel,
                               createdAt: task.createdAt,
                               deadline: timeOption == "none" ? null : selectedDeadline,
+                              hasAlarm: hasAlarm,
+                              hasReminder: hasReminder,
                             );
 
                             taskController.updateTask(task.id, reallyUpdatedTask);
@@ -1399,6 +1439,67 @@ class _CalendarScreenState extends State<CalendarScreen> with SingleTickerProvid
           ),
         );
       },
+    );
+  }
+
+  Widget _buildToggleOption({
+    required BuildContext context,
+    required IconData icon,
+    required String label,
+    required bool isActive,
+    required bool isEnabled,
+    required VoidCallback onTap,
+  }) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    
+    Color activeColor = theme.primaryColor;
+    Color inactiveColor = isDark ? Colors.white70 : Colors.black54;
+    Color disabledColor = isDark ? Colors.white24 : Colors.black26;
+
+    Color currentBg = isActive && isEnabled
+        ? activeColor.withOpacity(0.12)
+        : Colors.transparent;
+
+    Color currentBorderColor = !isEnabled
+        ? (isDark ? Colors.white10 : Colors.black.withOpacity(0.06))
+        : (isActive ? activeColor : (isDark ? Colors.white24 : Colors.black12));
+
+    Color currentTextColor = !isEnabled
+        ? disabledColor
+        : (isActive ? activeColor : inactiveColor);
+
+    return Opacity(
+      opacity: isEnabled ? 1.0 : 0.5,
+      child: InkWell(
+        onTap: isEnabled ? onTap : null,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          decoration: BoxDecoration(
+            color: currentBg,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: currentBorderColor, width: isActive && isEnabled ? 1.5 : 1.0),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.max,
+            children: [
+              Icon(icon, color: currentTextColor, size: 18),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  color: currentTextColor,
+                  fontSize: 13,
+                  fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+                  fontFamily: 'Inter',
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 

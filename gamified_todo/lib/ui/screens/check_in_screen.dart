@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../controllers/task_controller.dart';
 import '../../models/check_in_model.dart';
+import '../../utils/snackbar_utils.dart';
 import '../widgets/swipe_to_reveal.dart';
 import '../widgets/check_in_history_dialog.dart';
 
@@ -1015,6 +1016,7 @@ void showAddOrEditCheckInDialog(BuildContext context, CheckInModel? existingItem
                           onPressed: () {
                             if (titleController.text.trim().isEmpty) {
                               setModalState(() => titleError = true);
+                              SnackbarUtils.showError(title: '提示', message: '请输入打卡名称');
                               return;
                             }
 

@@ -15,9 +15,12 @@ void main() async {
   // Initialize Controllers
   final settingsController = Get.put(SettingsController());
   await settingsController.initialization;
-  Get.put(ThemeController());
-  Get.put(SkillController());
-  Get.put(TaskController());
+  final themeController = Get.put(ThemeController());
+  await themeController.initialization;
+  final taskController = Get.put(TaskController());
+  await taskController.initialization;
+  final skillController = Get.put(SkillController());
+  await skillController.initialization;
 
   runApp(const MyApp());
 }
