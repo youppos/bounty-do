@@ -167,7 +167,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
   Future<void> _pickCustomAudio(StateSetter setModalState, Function(String name, String? path, String? base64) onPicked) async {
     try {
-      final FilePickerResult? result = await FilePicker.pickFiles(
+      final FilePickerResult? result = await FilePicker.platform.pickFiles(
         type: FileType.audio,
         allowMultiple: false,
         withData: true,
