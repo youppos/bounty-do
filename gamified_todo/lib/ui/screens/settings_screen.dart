@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:auto_start_flutter/auto_start_flutter.dart';
 import '../../controllers/settings_controller.dart';
 import '../../controllers/theme_controller.dart';
 import '../../controllers/task_controller.dart';
@@ -448,6 +449,39 @@ class SettingsScreen extends StatelessWidget {
                   },
                   isLast: false,
                 ),
+                if (GetPlatform.isAndroid)
+                  _buildClickableRow(
+                    context: context,
+                    title: 'auto_start_permission'.tr,
+                    leading: Icon(Icons.rocket_launch_outlined, color: Colors.blue.shade600, size: 22),
+                    onTap: () async {
+                      showDialog(
+                        context: context,
+                        builder: (context) {
+                          final isDark = Theme.of(context).brightness == Brightness.dark;
+                          return AlertDialog(
+                            backgroundColor: Theme.of(context).cardColor,
+                            title: Text('notice'.tr, style: TextStyle(color: isDark ? Colors.white : Colors.black87, fontFamily: 'Inter')),
+                            content: Text('auto_start_notice'.tr, style: TextStyle(color: isDark ? Colors.white70 : Colors.black87, fontFamily: 'Inter')),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(context),
+                                child: Text('cancel'.tr, style: TextStyle(color: Colors.grey)),
+                              ),
+                              TextButton(
+                                onPressed: () async {
+                                  Navigator.pop(context);
+                                  await getAutoStartPermission();
+                                },
+                                child: Text('go_to_settings'.tr, style: TextStyle(color: Theme.of(context).primaryColor)),
+                              ),
+                            ],
+                          );
+                        },
+                      );
+                    },
+                    isLast: false,
+                  ),
                 _buildClickableRow(
                   context: context,
                   title: 'battery_guide_title'.tr,
