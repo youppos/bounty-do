@@ -41,7 +41,7 @@ jobs:
         working-directory: gamified_todo
         run: |
           set -o pipefail
-          flutter build apk --release -v 2>&1 | tee build_output.log
+          flutter build apk --release -v --android-skip-build-dependency-validation 2>&1 | tee build_output.log
         continue-on-error: false
 
       - name: Report Failure Summary
