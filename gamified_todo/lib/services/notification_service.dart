@@ -11,6 +11,7 @@ import '../models/task_model.dart';
 import '../models/check_in_model.dart';
 import '../controllers/task_controller.dart';
 import '../ui/widgets/alarm_trigger_dialog.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 @pragma('vm:entry-point')
 void notificationTapBackground(NotificationResponse notificationResponse) async {
@@ -195,6 +196,16 @@ class NotificationService {
     if (android != null) {
       final notif = await android.requestNotificationsPermission();
       await android.requestExactAlarmsPermission();
+      await android.requestFullScreenIntentPermission();
+      
+      // Request background execution and battery optimizations on Android 14+
+      if (await Permission.ignoreBatteryOptimizations.isDenied) {
+        await Permission.ignoreBatteryOptimizations.request();
+      }
+      if (await Permission.systemAlertWindow.isDenied) {
+        await Permission.systemAlertWindow.request();
+      }
+
       return notif ?? false;
     }
     return true;
@@ -313,7 +324,7 @@ class NotificationService {
               : '已到达计划完成时间，及时完成保持自律！',
           scheduledDate: scheduledDate,
           notificationDetails: notifDetails,
-          androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+          androidScheduleMode: AndroidScheduleMode.alarmClock,
           payload: payload,
         );
       }
@@ -385,7 +396,7 @@ class NotificationService {
         body: '到点打卡啦！坚持打卡可获得金币奖励哦！',
         scheduledDate: scheduledDate,
         notificationDetails: notifDetails,
-        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        androidScheduleMode: AndroidScheduleMode.alarmClock,
         matchDateTimeComponents: DateTimeComponents.time,
         payload: payload,
       );
