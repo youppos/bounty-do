@@ -1,7 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:auto_start_flutter/auto_start_flutter.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../../controllers/settings_controller.dart';
 import '../../controllers/theme_controller.dart';
 import '../../controllers/task_controller.dart';
@@ -471,7 +471,7 @@ class SettingsScreen extends StatelessWidget {
                               TextButton(
                                 onPressed: () async {
                                   Navigator.pop(context);
-                                  await getAutoStartPermission();
+                                  await openAppSettings();
                                 },
                                 child: Text('go_to_settings'.tr, style: TextStyle(color: Theme.of(context).primaryColor)),
                               ),
