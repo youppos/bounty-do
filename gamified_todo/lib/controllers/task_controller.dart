@@ -9,6 +9,7 @@ import '../models/check_in_model.dart';
 import 'skill_controller.dart';
 import '../utils/snackbar_utils.dart';
 import '../ui/widgets/alarm_trigger_dialog.dart';
+import '../services/notification_service.dart';
 
 class TaskController extends GetxController {
   // 观察状态的响应式列表
@@ -151,6 +152,9 @@ class TaskController extends GetxController {
       loadMockCheckIns();
       await _saveCheckIns();
     }
+
+    // 同步离线系统通知与强闹钟
+    NotificationService().rescheduleAll(tasks: tasks, checkIns: checkIns);
   }
 
   Future<void> _saveTasks() async {
@@ -243,6 +247,7 @@ class TaskController extends GetxController {
   void addTask(TaskModel task) {
     tasks.add(task);
     _saveTasks();
+    NotificationService().scheduleTaskAlarmOrReminder(task);
   }
 
   // 更新任务
@@ -251,6 +256,7 @@ class TaskController extends GetxController {
     if (index != -1) {
       tasks[index] = updatedTask;
       _saveTasks();
+      NotificationService().scheduleTaskAlarmOrReminder(updatedTask);
     }
   }
 
@@ -295,6 +301,13 @@ class TaskController extends GetxController {
       );
       tasks[index] = updatedTask;
       _saveTasks();
+
+      // 同步系统通知：完成则取消，重新未完成则重新规划
+      if (isCompleted) {
+        NotificationService().cancelTaskNotification(id);
+      } else {
+        NotificationService().scheduleTaskAlarmOrReminder(updatedTask);
+      }
       
       // 更新金币
       if (isCompleted) {
@@ -317,6 +330,7 @@ class TaskController extends GetxController {
     if (index != -1) {
       tasks[index] = tasks[index].copyWith(hasAlarm: !tasks[index].hasAlarm);
       _saveTasks();
+      NotificationService().scheduleTaskAlarmOrReminder(tasks[index]);
     }
   }
 
@@ -326,6 +340,7 @@ class TaskController extends GetxController {
     if (index != -1) {
       tasks[index] = tasks[index].copyWith(hasReminder: !tasks[index].hasReminder);
       _saveTasks();
+      NotificationService().scheduleTaskAlarmOrReminder(tasks[index]);
     }
   }
 
@@ -364,12 +379,14 @@ class TaskController extends GetxController {
   void deleteTask(String id) {
     tasks.removeWhere((task) => task.id == id);
     _saveTasks();
+    NotificationService().cancelTaskNotification(id);
   }
 
   // 添加打卡项目
   void addCheckIn(CheckInModel item) {
     checkIns.add(item);
     _saveCheckIns();
+    NotificationService().scheduleCheckInReminder(item);
   }
 
   // 更新打卡项目
@@ -378,6 +395,7 @@ class TaskController extends GetxController {
     if (index != -1) {
       checkIns[index] = updatedItem;
       _saveCheckIns();
+      NotificationService().scheduleCheckInReminder(updatedItem);
     }
   }
 
@@ -385,6 +403,7 @@ class TaskController extends GetxController {
   void deleteCheckIn(String id) {
     checkIns.removeWhere((item) => item.id == id);
     _saveCheckIns();
+    NotificationService().cancelCheckInNotification(id);
   }
 
   // 切换打卡完成状态
@@ -513,7 +532,10 @@ class TaskController extends GetxController {
       // 移出已触发列表，使其到期时能再次触发
       _triggeredAlarmTaskIds.remove(id);
       _saveTasks();
-      Get.back(); // 关闭闹钟弹窗
+      NotificationService().scheduleTaskAlarmOrReminder(tasks[index]);
+      if (Get.isDialogOpen == true) {
+        Get.back(); // 关闭闹钟弹窗
+      }
       SnackbarUtils.showInfo(
         title: '闹钟已延迟',
         message: '任务截止时间已延时10分钟。',
@@ -525,14 +547,18 @@ class TaskController extends GetxController {
   void dismissAlarm() {
     stopAlarmSound();
     activeAlarmTask.value = null;
-    Get.back(); // 关闭闹钟弹窗
+    if (Get.isDialogOpen == true) {
+      Get.back(); // 关闭闹钟弹窗
+    }
   }
 
   // 立即完成任务（关闭闹钟并触发完成结算）
   void completeAlarmTask(String id) {
     stopAlarmSound();
     activeAlarmTask.value = null;
-    Get.back(); // 关闭闹钟弹窗
+    if (Get.isDialogOpen == true) {
+      Get.back(); // 关闭闹钟弹窗
+    }
     toggleTaskCompletion(id);
   }
 }

@@ -8,9 +8,14 @@ import 'controllers/skill_controller.dart';
 import 'ui/screens/home_screen.dart';
 import 'controllers/settings_controller.dart';
 import 'translations/app_translations.dart';
+import 'services/notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize Notification Service and Permissions
+  await NotificationService().init();
+  NotificationService().requestPermissions();
 
   // Initialize Controllers
   final settingsController = Get.put(SettingsController());

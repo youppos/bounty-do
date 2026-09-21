@@ -4,6 +4,7 @@ import 'package:get/get.dart';
 import '../../controllers/settings_controller.dart';
 import '../../controllers/theme_controller.dart';
 import '../../controllers/task_controller.dart';
+import '../../services/notification_service.dart';
 import '../theme/app_theme.dart';
 
 class SettingsScreen extends StatelessWidget {
@@ -61,6 +62,90 @@ class SettingsScreen extends StatelessWidget {
                   const Divider(height: 20, color: Colors.white24),
                   Text(
                     'gameplay_guide'.tr,
+                    style: TextStyle(
+                      fontSize: 14,
+                      height: 1.6,
+                      color: isDark ? Colors.white70 : Colors.black87,
+                      fontFamily: 'Inter',
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.pop(context),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Theme.of(context).primaryColor,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                      child: const Text('OK', style: TextStyle(fontWeight: FontWeight.bold)),
+                    ),
+                  )
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showBatteryGuide(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 500),
+            decoration: BoxDecoration(
+              color: isDark ? Colors.grey.shade900.withOpacity(0.95) : Colors.white.withOpacity(0.95),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: isDark ? Colors.white10 : Colors.black12),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.2),
+                  blurRadius: 15,
+                  offset: const Offset(0, 10),
+                )
+              ]
+            ),
+            padding: const EdgeInsets.all(24),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.battery_charging_full_rounded, color: Colors.orange.shade700, size: 28),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'battery_guide_title'.tr,
+                          style: TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.bold,
+                            color: isDark ? Colors.white : Colors.black87,
+                            fontFamily: 'Inter',
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        icon: Icon(Icons.close, color: isDark ? Colors.white60 : Colors.black54, size: 20),
+                        onPressed: () => Navigator.pop(context),
+                      )
+                    ],
+                  ),
+                  const Divider(height: 20, color: Colors.white24),
+                  Text(
+                    'battery_guide_content'.tr,
                     style: TextStyle(
                       fontSize: 14,
                       height: 1.6,
@@ -340,6 +425,39 @@ class SettingsScreen extends StatelessWidget {
               ],
             )),
           ),
+          
+          const SizedBox(height: 24),
+          _buildSectionTitle('notification_permission_title'.tr, context),
+          _buildGroupContainer(
+            context: context,
+            child: Column(
+              children: [
+                _buildClickableRow(
+                  context: context,
+                  title: 'notification_permission_desc'.tr,
+                  leading: Icon(Icons.notifications_active_outlined, color: Theme.of(context).primaryColor, size: 22),
+                  onTap: () async {
+                    final granted = await NotificationService().requestPermissions();
+                    Get.snackbar(
+                      'notification_permission_title'.tr,
+                      granted ? 'notification_granted'.tr : 'notification_denied'.tr,
+                      snackPosition: SnackPosition.BOTTOM,
+                      margin: const EdgeInsets.all(16),
+                      duration: const Duration(seconds: 3),
+                    );
+                  },
+                  isLast: false,
+                ),
+                _buildClickableRow(
+                  context: context,
+                  title: 'battery_guide_title'.tr,
+                  leading: Icon(Icons.battery_charging_full_rounded, color: Colors.orange.shade700, size: 22),
+                  onTap: () => _showBatteryGuide(context),
+                  isLast: true,
+                ),
+              ],
+            ),
+          ),
           const SizedBox(height: 40),
         ],
       ),
@@ -420,6 +538,51 @@ class SettingsScreen extends StatelessWidget {
               ),
               if (isSelected)
                 Icon(CupertinoIcons.checkmark_alt, color: Theme.of(context).primaryColor, size: 22)
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildClickableRow({
+    required BuildContext context,
+    required String title,
+    required VoidCallback onTap,
+    required bool isLast,
+    Widget? leading,
+    Widget? trailing,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final dividerColor = isDark ? Colors.white12 : Colors.black.withOpacity(0.05);
+    
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            border: isLast ? null : Border(bottom: BorderSide(color: dividerColor, width: 1)),
+          ),
+          child: Row(
+            children: [
+              if (leading != null) ...[
+                leading,
+                const SizedBox(width: 12),
+              ],
+              Expanded(
+                child: Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
+                    color: Theme.of(context).textTheme.bodyLarge?.color,
+                    fontFamily: 'Inter',
+                  ),
+                ),
+              ),
+              trailing ?? Icon(CupertinoIcons.chevron_right, color: isDark ? Colors.white38 : Colors.black26, size: 18),
             ],
           ),
         ),
