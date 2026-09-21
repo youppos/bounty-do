@@ -12,10 +12,14 @@ jobs:
   build:
     name: Build Flutter APK
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Java
         uses: actions/setup-java@v5
@@ -46,7 +50,7 @@ jobs:
           if [ -f gamified_todo/build_output.log ]; then
             echo "### ❌ Build APK Failed" >> $GITHUB_STEP_SUMMARY
             echo '```text' >> $GITHUB_STEP_SUMMARY
-            tail -n 100 gamified_todo/build_output.log >> $GITHUB_STEP_SUMMARY
+            tail -n 120 gamified_todo/build_output.log >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
           fi
 
@@ -56,6 +60,20 @@ jobs:
         with:
           name: build-failure-log
           path: gamified_todo/build_output.log
+
+      - name: Push failure log to ci-logs branch
+        if: failure()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -B ci-logs
+          git reset --hard
+          if [ -f gamified_todo/build_output.log ]; then
+            tail -n 200 gamified_todo/build_output.log > latest_error.log
+            git add -f latest_error.log
+            git commit -m "chore: record build error for run ${{ github.run_number }}"
+            git push origin ci-logs --force || true
+          fi
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
